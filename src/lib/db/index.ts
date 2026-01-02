@@ -2,7 +2,8 @@ import { openDB, type IDBPDatabase, type IDBPTransaction } from "idb";
 import { DB_NAME, DB_VERSION, StoreName, upgradeDb } from "./schema";
 
 type DbInstance = IDBPDatabase<unknown>;
-type DbTx<M extends IDBTransactionMode = IDBTransactionMode> = IDBPTransaction<
+export type DbTx<M extends IDBTransactionMode = IDBTransactionMode> =
+  IDBPTransaction<
   unknown,
   StoreName[],
   M
