@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import {
   Search,
@@ -10,9 +10,10 @@ import {
   Copy,
   Trash2,
   Home,
-  FileText,
   History,
+  FileText,
 } from "lucide-react";
+import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -24,134 +25,128 @@ import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { Separator } from "@/components/ui/separator";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import type { Plan } from "@/lib/domain/types";
+import { getCurrentYearMonth } from "@/lib/format";
+import { createRepositories } from "@/lib/repo/factory";
 
-interface Plan {
-  id: string;
-  name: string;
-  householdSummary: string;
-  currentMonthBalance: number;
-  assetBalance: number;
-  debtBalance: number;
-  status: "pending" | "completed";
-  lastUpdated: string;
-  currentVersion: string;
-  versionDate: string;
-  isArchived: boolean;
-}
+type PlanRow = Plan & { needsInput: boolean };
+type ConfirmAction = { type: "archive" | "restore"; plan: PlanRow };
 
-const mockPlans: Plan[] = [
-  {
-    id: "1",
-    name: "山田家 2026",
-    householdSummary: "夫婦+子1 / 住宅: 高性能住宅",
-    currentMonthBalance: 32000,
-    assetBalance: 8450000,
-    debtBalance: 28900000,
-    status: "pending",
-    lastUpdated: "2026/01/02",
-    currentVersion: "v3",
-    versionDate: "2025/12/15",
-    isArchived: false,
-  },
-  {
-    id: "2",
-    name: "佐藤家 2026",
-    householdSummary: "夫婦+子2 / 住宅: 一般戸建",
-    currentMonthBalance: -45000,
-    assetBalance: 12300000,
-    debtBalance: 35000000,
-    status: "completed",
-    lastUpdated: "2025/12/28",
-    currentVersion: "v2",
-    versionDate: "2025/11/20",
-    isArchived: false,
-  },
-  {
-    id: "3",
-    name: "鈴木家 2026",
-    householdSummary: "夫婦 / 住宅: 分譲マンション",
-    currentMonthBalance: 58000,
-    assetBalance: 15600000,
-    debtBalance: 22400000,
-    status: "completed",
-    lastUpdated: "2025/12/30",
-    currentVersion: "v5",
-    versionDate: "2025/12/10",
-    isArchived: false,
-  },
-  {
-    id: "4",
-    name: "田中家 2025",
-    householdSummary: "単身 / 住宅: 賃貸",
-    currentMonthBalance: 28000,
-    assetBalance: 3200000,
-    debtBalance: 0,
-    status: "pending",
-    lastUpdated: "2025/12/25",
-    currentVersion: "v1",
-    versionDate: "2025/12/01",
-    isArchived: false,
-  },
-  {
-    id: "5",
-    name: "高橋家 2026",
-    householdSummary: "夫婦+子3 / 住宅: 高性能住宅",
-    currentMonthBalance: 12000,
-    assetBalance: 9800000,
-    debtBalance: 42000000,
-    status: "completed",
-    lastUpdated: "2026/01/01",
-    currentVersion: "v4",
-    versionDate: "2025/11/30",
-    isArchived: false,
-  },
-  {
-    id: "6",
-    name: "伊藤家 2025",
-    householdSummary: "夫婦+子1 / 住宅: 分譲マンション",
-    currentMonthBalance: -15000,
-    assetBalance: 6700000,
-    debtBalance: 18000000,
-    status: "completed",
-    lastUpdated: "2025/11/15",
-    currentVersion: "v2",
-    versionDate: "2025/10/20",
-    isArchived: true,
-  },
-];
+const formatUpdatedAt = (value: string) => {
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) return value;
+  return parsed.toLocaleDateString("ja-JP");
+};
 
 export default function PlansListPage() {
+  const repos = useMemo(() => createRepositories(), []);
+  const [plans, setPlans] = useState<PlanRow[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
   const [activeTab, setActiveTab] = useState("all");
+  const [confirmAction, setConfirmAction] = useState<ConfirmAction | null>(
+    null,
+  );
+  const [actionLoading, setActionLoading] = useState(false);
 
-  const filteredPlans = mockPlans.filter((plan) => {
-    const matchesSearch =
-      plan.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      plan.householdSummary.toLowerCase().includes(searchQuery.toLowerCase());
+  const loadPlans = useCallback(async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const list = await repos.plan.list();
+      const currentYm = getCurrentYearMonth();
+      const needsInput = new Map<string, boolean>();
+      await Promise.all(
+        list.map(async (plan) => {
+          const record = await repos.monthly.getByYm(plan.id, currentYm);
+          needsInput.set(plan.id, !record);
+        }),
+      );
+      const enriched = list.map((plan) => ({
+        ...plan,
+        needsInput: needsInput.get(plan.id) ?? true,
+      }));
+      setPlans(enriched);
+    } catch (fetchError) {
+      console.error(fetchError);
+      setError("プランの読み込みに失敗しました。");
+      toast.error("プランの読み込みに失敗しました。");
+    } finally {
+      setLoading(false);
+    }
+  }, [repos]);
 
-    if (activeTab === "all") return matchesSearch && !plan.isArchived;
-    if (activeTab === "pending")
-      return matchesSearch && plan.status === "pending" && !plan.isArchived;
-    if (activeTab === "recent") return matchesSearch && !plan.isArchived;
-    if (activeTab === "archived") return matchesSearch && plan.isArchived;
+  useEffect(() => {
+    void loadPlans();
+  }, [loadPlans]);
 
-    return matchesSearch;
-  });
+  const filteredPlans = useMemo(() => {
+    const normalizedQuery = searchQuery.trim().toLowerCase();
+    const matchesSearch = (plan: PlanRow) =>
+      normalizedQuery.length === 0 ||
+      plan.name.toLowerCase().includes(normalizedQuery);
 
-  const formatCurrency = (amount: number) => {
-    return amount.toLocaleString("ja-JP") + "円";
-  };
+    const filtered = plans.filter((plan) => {
+      if (!matchesSearch(plan)) return false;
+      if (activeTab === "archived") return plan.status === "archived";
+      if (activeTab === "pending")
+        return plan.status === "active" && plan.needsInput;
+      if (activeTab === "recent") return plan.status === "active";
+      if (activeTab === "all") return plan.status === "active";
+      return true;
+    });
 
-  const handleAction = (action: string, planId: string) => {
-    console.log(`Action: ${action}, Plan ID: ${planId}`);
-  };
+    const sorted = [...filtered];
+    if (activeTab === "recent" || activeTab === "archived") {
+      sorted.sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
+    } else {
+      sorted.sort((a, b) => a.name.localeCompare(b.name, "ja"));
+    }
+    return sorted;
+  }, [activeTab, plans, searchQuery]);
+
+  const handleConfirmAction = useCallback(async () => {
+    if (!confirmAction) return;
+    setActionLoading(true);
+    try {
+      if (confirmAction.type === "archive") {
+        await repos.plan.archive(confirmAction.plan.id);
+        toast.success("アーカイブしました");
+      } else {
+        await repos.plan.restore(confirmAction.plan.id);
+        toast.success("復元しました");
+      }
+      await loadPlans();
+    } catch (actionError) {
+      console.error(actionError);
+      toast.error(
+        confirmAction.type === "archive"
+          ? "アーカイブに失敗しました"
+          : "復元に失敗しました",
+      );
+    } finally {
+      setActionLoading(false);
+      setConfirmAction(null);
+    }
+  }, [confirmAction, loadPlans, repos]);
 
   return (
     <div className="min-h-screen bg-background">
@@ -240,7 +235,34 @@ export default function PlansListPage() {
 
       {/* Main Content */}
       <main className="container mx-auto px-4 py-6 sm:px-6 sm:py-8">
-        {filteredPlans.length === 0 ? (
+        {error ? (
+          <div className="mb-6">
+            <Alert variant="destructive">
+              <AlertTitle>読み込みに失敗しました</AlertTitle>
+              <AlertDescription>
+                <p>{error}</p>
+              </AlertDescription>
+            </Alert>
+          </div>
+        ) : null}
+
+        {loading ? (
+          <div className="grid gap-4 sm:gap-6 md:grid-cols-2 lg:grid-cols-3">
+            {Array.from({ length: 6 }).map((_, index) => (
+              <Card
+                key={`plan-skeleton-${index}`}
+                className="flex flex-col gap-4 p-4"
+              >
+                <div className="flex items-center justify-between gap-2">
+                  <div className="h-4 w-1/2 rounded bg-muted animate-pulse" />
+                  <div className="h-5 w-16 rounded bg-muted animate-pulse" />
+                </div>
+                <div className="h-3 w-1/3 rounded bg-muted animate-pulse" />
+                <div className="mt-auto h-9 w-full rounded bg-muted animate-pulse" />
+              </Card>
+            ))}
+          </div>
+        ) : filteredPlans.length === 0 ? (
           /* Empty State */
           <div className="flex min-h-[60vh] flex-col items-center justify-center gap-4 text-center">
             <div className="rounded-full bg-muted p-6">
@@ -275,65 +297,22 @@ export default function PlansListPage() {
                       <h3 className="text-lg font-semibold leading-tight text-foreground">
                         {plan.name}
                       </h3>
-                      <p className="text-sm text-muted-foreground">
-                        {plan.householdSummary}
-                      </p>
                     </div>
                     <Badge
-                      variant={
-                        plan.status === "pending" ? "destructive" : "default"
-                      }
+                      variant={plan.needsInput ? "destructive" : "default"}
                       className={
-                        plan.status === "completed"
-                          ? "bg-green-500 hover:bg-green-600 text-white"
-                          : ""
+                        plan.needsInput
+                          ? ""
+                          : "bg-green-500 hover:bg-green-600 text-white"
                       }
                     >
-                      {plan.status === "pending" ? "今月未入力" : "入力済み"}
+                      {plan.needsInput ? "今月未入力" : "入力済み"}
                     </Badge>
                   </div>
                 </CardHeader>
 
-                <CardContent className="flex-1 space-y-4 pb-4">
-                  {/* KPI Row */}
-                  <div className="space-y-2 rounded-lg bg-muted/50 p-3">
-                    <div className="flex items-center justify-between text-sm">
-                      <span className="text-muted-foreground">今月の収支</span>
-                      <span
-                        className={`font-semibold ${
-                          plan.currentMonthBalance >= 0
-                            ? "text-green-600"
-                            : "text-red-600"
-                        }`}
-                      >
-                        {plan.currentMonthBalance >= 0 ? "+" : ""}
-                        {formatCurrency(plan.currentMonthBalance)}
-                      </span>
-                    </div>
-                    <Separator />
-                    <div className="flex items-center justify-between text-sm">
-                      <span className="text-muted-foreground">資産残高</span>
-                      <span className="font-semibold text-foreground">
-                        {formatCurrency(plan.assetBalance)}
-                      </span>
-                    </div>
-                    <Separator />
-                    <div className="flex items-center justify-between text-sm">
-                      <span className="text-muted-foreground">負債残高</span>
-                      <span className="font-semibold text-foreground">
-                        {formatCurrency(plan.debtBalance)}
-                      </span>
-                    </div>
-                  </div>
-
-                  {/* Metadata */}
-                  <div className="space-y-1 text-xs text-muted-foreground">
-                    <p>最終更新: {plan.lastUpdated}</p>
-                    <p>
-                      現行バージョン: {plan.currentVersion}（改定{" "}
-                      {plan.versionDate}）
-                    </p>
-                  </div>
+                <CardContent className="flex-1 space-y-2 pb-4 text-xs text-muted-foreground">
+                  <p>最終更新: {formatUpdatedAt(plan.updatedAt)}</p>
                 </CardContent>
 
                 <CardFooter className="flex items-center gap-2 border-t pt-4">
@@ -354,34 +333,40 @@ export default function PlansListPage() {
                       </Button>
                     </DropdownMenuTrigger>
                     <DropdownMenuContent align="end" className="w-48">
-                      <DropdownMenuItem
-                        onClick={() => handleAction("housing-lcc", plan.id)}
-                      >
-                        <Home className="mr-2 h-4 w-4" />
-                        住宅LCCを見る
+                      <DropdownMenuItem asChild>
+                        <Link href={`/plans/${plan.id}/housing`}>
+                          <Home className="mr-2 h-4 w-4" />
+                          住宅LCCを見る
+                        </Link>
                       </DropdownMenuItem>
-                      <DropdownMenuItem
-                        onClick={() => handleAction("version-history", plan.id)}
-                      >
-                        <History className="mr-2 h-4 w-4" />
-                        改定履歴
+                      <DropdownMenuItem asChild>
+                        <Link href={`/plans/${plan.id}/versions`}>
+                          <History className="mr-2 h-4 w-4" />
+                          改定履歴
+                        </Link>
                       </DropdownMenuItem>
                       <DropdownMenuSeparator />
-                      <DropdownMenuItem
-                        onClick={() => handleAction("duplicate", plan.id)}
-                      >
+                      <DropdownMenuItem disabled>
                         <Copy className="mr-2 h-4 w-4" />
                         複製
                       </DropdownMenuItem>
                       <DropdownMenuItem
-                        onClick={() => handleAction("archive", plan.id)}
+                        onClick={() =>
+                          setConfirmAction({
+                            type:
+                              plan.status === "archived"
+                                ? "restore"
+                                : "archive",
+                            plan,
+                          })
+                        }
                       >
                         <Archive className="mr-2 h-4 w-4" />
-                        アーカイブ
+                        {plan.status === "archived" ? "復元" : "アーカイブ"}
                       </DropdownMenuItem>
                       <DropdownMenuSeparator />
                       <DropdownMenuItem
-                        onClick={() => handleAction("delete", plan.id)}
+                        disabled
                         className="text-destructive focus:text-destructive"
                       >
                         <Trash2 className="mr-2 h-4 w-4" />
@@ -395,6 +380,43 @@ export default function PlansListPage() {
           </div>
         )}
       </main>
+
+      <AlertDialog
+        open={Boolean(confirmAction)}
+        onOpenChange={(open) => {
+          if (!open && !actionLoading) {
+            setConfirmAction(null);
+          }
+        }}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>
+              {confirmAction?.type === "archive"
+                ? "アーカイブしますか？"
+                : "復元しますか？"}
+            </AlertDialogTitle>
+            <AlertDialogDescription>
+              {confirmAction?.type === "archive"
+                ? "プランは一覧から非表示になります。"
+                : "プランを一覧に戻します。"}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={actionLoading}>
+              キャンセル
+            </AlertDialogCancel>
+            <AlertDialogAction
+              onClick={handleConfirmAction}
+              disabled={actionLoading}
+            >
+              {confirmAction?.type === "archive"
+                ? "アーカイブする"
+                : "復元する"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }
