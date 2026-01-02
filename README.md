@@ -76,6 +76,11 @@ MVP ではローカルの IndexedDB にデータを保存します。
 - Chrome DevTools → **Application** → **IndexedDB** → 該当 DB を削除
   もしくは、アプリ内に開発モード限定の「データ初期化」機能がある場合はそれを使用してください。
 
+### 開発用：IndexedDB スモークチェック
+
+- `yarn dev` 起動後に `/dev/db-check` を開いて **Run Check** を実行
+- `plans` store に一時データを `put/get/listAll` で確認し、最後に削除します
+
 ### 仕様（目安）
 
 - 月次実績：Plan 直下で保存（改定 Version に依存しない）
