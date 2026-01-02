@@ -506,7 +506,7 @@ export default function PlanDashboardPage() {
                     </CardDescription>
                   </div>
                   {hasData && (
-                    <Badge variant="secondary">住宅: WELLNEST HOME</Badge>
+                    <Badge variant="secondary">住宅: 高性能住宅</Badge>
                   )}
                 </div>
               </CardHeader>

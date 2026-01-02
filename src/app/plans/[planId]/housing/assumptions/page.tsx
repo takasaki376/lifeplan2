@@ -55,7 +55,7 @@ import { toast } from "sonner";
 // Toggle this to simulate first-time vs existing assumptions state
 const HAS_ASSUMPTIONS = true;
 
-type HousingType = "wellnest" | "detached" | "condo" | "rent";
+type HousingType = "high_performance_home" | "detached" | "condo" | "rent";
 type EditMode = "simple" | "advanced";
 type Scenario = "conservative" | "base" | "optimistic";
 type Preset = "base" | "conservative" | "optimistic";
@@ -91,14 +91,18 @@ interface Assumptions {
 }
 
 const HOUSING_TYPES = [
-  { id: "wellnest" as HousingType, label: "WELLNEST HOME", icon: Home },
+  {
+    id: "high_performance_home" as HousingType,
+    label: "高性能住宅",
+    icon: Home,
+  },
   { id: "detached" as HousingType, label: "一般戸建", icon: Home },
   { id: "condo" as HousingType, label: "分譲マンション", icon: Building2 },
   { id: "rent" as HousingType, label: "賃貸", icon: Building },
 ];
 
 const DEFAULT_ASSUMPTIONS: Record<HousingType, Assumptions> = {
-  wellnest: {
+  high_performance_home: {
     initialCost: 5000000,
     loanAmount: 35000000,
     interestRate: 1.2,
@@ -169,7 +173,9 @@ export default function HousingAssumptionsPage() {
   //   const { toast } = useToast();
 
   const planId = params.planId as string;
-  const [activeType, setActiveType] = useState<HousingType>("wellnest");
+  const [activeType, setActiveType] = useState<HousingType>(
+    "high_performance_home"
+  );
   const [editMode, setEditMode] = useState<EditMode>("simple");
   const [scenario, setScenario] = useState<Scenario>("base");
   const [horizonYears, setHorizonYears] = useState(35);
@@ -862,7 +868,7 @@ export default function HousingAssumptionsPage() {
                       </>
                     ) : (
                       <>
-                        {/* Wellnest / Detached */}
+                        {/* 高性能住宅 / 一般戸建 */}
                         <div className="space-y-4">
                           <div className="flex items-center gap-2">
                             <KeyRound className="h-4 w-4 text-muted-foreground" />

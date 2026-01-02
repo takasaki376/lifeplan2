@@ -50,7 +50,7 @@ const mockPlans: Plan[] = [
   {
     id: "1",
     name: "山田家 2026",
-    householdSummary: "夫婦+子1 / 住宅: WELLNEST HOME",
+    householdSummary: "夫婦+子1 / 住宅: 高性能住宅",
     currentMonthBalance: 32000,
     assetBalance: 8450000,
     debtBalance: 28900000,
@@ -102,7 +102,7 @@ const mockPlans: Plan[] = [
   {
     id: "5",
     name: "高橋家 2026",
-    householdSummary: "夫婦+子3 / 住宅: WELLNEST HOME",
+    householdSummary: "夫婦+子3 / 住宅: 高性能住宅",
     currentMonthBalance: 12000,
     assetBalance: 9800000,
     debtBalance: 42000000,

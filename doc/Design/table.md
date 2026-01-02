@@ -165,30 +165,30 @@
 **目的**：住宅タイプ別の LCC 入力前提（編集可能）  
 **方針**：共通カラム＋タイプ固有は `type_specific jsonb`
 
-| Column                     | Type        | Null | Default           | Notes                            |
-| -------------------------- | ----------- | ---: | ----------------- | -------------------------------- |
-| id                         | uuid        |   NO | gen_random_uuid() | PK                               |
-| plan_version_id            | uuid        |   NO |                   | FK → plan_versions.id            |
-| housing_type               | text        |   NO |                   | `wellnest/detached/condo/rent`   |
-| is_selected                | boolean     |   NO | false             | version 内で選択中（任意）       |
-| initial_cost_yen           | numeric     |  YES |                   | 初期費用（合算）                 |
-| down_payment_yen           | numeric     |  YES |                   | 頭金                             |
-| closing_cost_yen           | numeric     |  YES |                   | 諸費用                           |
-| loan_principal_yen         | numeric     |  YES |                   | 借入元本                         |
-| loan_interest_rate         | numeric     |  YES |                   | 金利（例 0.012）                 |
-| loan_term_months           | int         |  YES |                   | 例：420（35 年）                 |
-| repayment_type             | text        |  YES |                   | `annuity/equal_principal`        |
-| property_tax_annual_yen    | numeric     |  YES |                   | 固定資産税（概算）               |
-| utilities_base_monthly_yen | numeric     |  YES |                   | 基準光熱費（月）                 |
-| utilities_factor           | numeric     |  YES |                   | 性能係数（例 0.85）              |
-| type_specific              | jsonb       |  YES |                   | タイプ固有（修繕/管理費/家賃等） |
-| created_at                 | timestamptz |   NO | now()             |                                  |
-| updated_at                 | timestamptz |   NO | now()             |                                  |
+| Column                     | Type        | Null | Default           | Notes                                       |
+| -------------------------- | ----------- | ---: | ----------------- | ------------------------------------------- |
+| id                         | uuid        |   NO | gen_random_uuid() | PK                                          |
+| plan_version_id            | uuid        |   NO |                   | FK → plan_versions.id                       |
+| housing_type               | text        |   NO |                   | `high_performance_home/detached/condo/rent` |
+| is_selected                | boolean     |   NO | false             | version 内で選択中（任意）                  |
+| initial_cost_yen           | numeric     |  YES |                   | 初期費用（合算）                            |
+| down_payment_yen           | numeric     |  YES |                   | 頭金                                        |
+| closing_cost_yen           | numeric     |  YES |                   | 諸費用                                      |
+| loan_principal_yen         | numeric     |  YES |                   | 借入元本                                    |
+| loan_interest_rate         | numeric     |  YES |                   | 金利（例 0.012）                            |
+| loan_term_months           | int         |  YES |                   | 例：420（35 年）                            |
+| repayment_type             | text        |  YES |                   | `annuity/equal_principal`                   |
+| property_tax_annual_yen    | numeric     |  YES |                   | 固定資産税（概算）                          |
+| utilities_base_monthly_yen | numeric     |  YES |                   | 基準光熱費（月）                            |
+| utilities_factor           | numeric     |  YES |                   | 性能係数（例 0.85）                         |
+| type_specific              | jsonb       |  YES |                   | タイプ固有（修繕/管理費/家賃等）            |
+| created_at                 | timestamptz |   NO | now()             |                                             |
+| updated_at                 | timestamptz |   NO | now()             |                                             |
 
 **Constraints**
 
 - `UNIQUE (plan_version_id, housing_type)`
-- `CHECK (housing_type in ('wellnest','detached','condo','rent'))`
+- `CHECK (housing_type in ('high_performance_home','detached','condo','rent'))`
 - （任意）部分ユニーク：`UNIQUE (plan_version_id) WHERE is_selected = true`
 
 **Indexes（推奨）**
@@ -198,7 +198,7 @@
 
 **type_specific JSON 例**
 
-- WELLNEST/一般戸建：
+- 高性能住宅/一般戸建：
   - `{ "repairs": [{ "cycle_years": 15, "cost_yen": 1200000 }, { "cycle_years": 30, "cost_yen": 2500000 }] }`
 - 分譲マンション：
   - `{ "mgmt_fee_monthly_yen": 18000, "reserve_fee_monthly_yen": 12000, "parking_monthly_yen": 8000, "special_assessments": [{ "year": 12, "cost_yen": 300000 }] }`
@@ -271,16 +271,16 @@
 
 **目的**：version×scenario×housing_type の LCC 計算結果を保存（差分画面を軽くする）
 
-| Column          | Type        | Null | Default           | Notes                           |
-| --------------- | ----------- | ---: | ----------------- | ------------------------------- |
-| id              | uuid        |   NO | gen_random_uuid() | PK                              |
-| plan_version_id | uuid        |   NO |                   | FK → plan_versions.id           |
-| scenario_key    | text        |   NO |                   | conservative/base/optimistic    |
-| housing_type    | text        |   NO |                   | wellnest/detached/condo/rent    |
-| horizon_years   | int         |   NO |                   | 例：35                          |
-| total_lcc_yen   | numeric     |   NO |                   |                                 |
-| breakdown       | jsonb       |  YES |                   | 内訳（ローン/修繕/光熱/税など） |
-| calculated_at   | timestamptz |   NO | now()             |                                 |
+| Column          | Type        | Null | Default           | Notes                                     |
+| --------------- | ----------- | ---: | ----------------- | ----------------------------------------- |
+| id              | uuid        |   NO | gen_random_uuid() | PK                                        |
+| plan_version_id | uuid        |   NO |                   | FK → plan_versions.id                     |
+| scenario_key    | text        |   NO |                   | conservative/base/optimistic              |
+| housing_type    | text        |   NO |                   | high_performance_home/detached/condo/rent |
+| horizon_years   | int         |   NO |                   | 例：35                                    |
+| total_lcc_yen   | numeric     |   NO |                   |                                           |
+| breakdown       | jsonb       |  YES |                   | 内訳（ローン/修繕/光熱/税など）           |
+| calculated_at   | timestamptz |   NO | now()             |                                           |
 
 **Constraints**
 

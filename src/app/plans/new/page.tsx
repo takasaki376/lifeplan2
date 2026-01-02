@@ -37,8 +37,8 @@ interface FormData {
 
 const housingOptions = [
   {
-    value: "wellnest",
-    title: "WELLNEST HOME",
+    value: "high_performance_home",
+    title: "高性能住宅",
     description: "高耐久・高性能住宅（光熱費・修繕費を抑える前提）",
   },
   {

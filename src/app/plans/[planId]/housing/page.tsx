@@ -48,7 +48,7 @@ const MOCK_PLAN = {
   name: "田中家のライフプラン 2024",
 };
 
-type HousingType = "wellnest" | "detached" | "condo" | "rent";
+type HousingType = "high_performance_home" | "detached" | "condo" | "rent";
 type ScenarioKey = "conservative" | "base" | "optimistic";
 
 interface LCCBreakdown {
@@ -88,7 +88,7 @@ export default function HousingLCCPage() {
   const [scenarioKey, setScenarioKey] = useState<ScenarioKey>("base");
   const [horizonYears, setHorizonYears] = useState<string>("35");
   const [selectedType, setSelectedType] = useState<HousingType | null>(
-    "wellnest"
+    "high_performance_home"
   );
   const [chartView, setChartView] = useState<ChartView>("total");
 
@@ -96,8 +96,8 @@ export default function HousingLCCPage() {
   const mockLCCData: Record<ScenarioKey, HousingLCC[]> = {
     base: [
       {
-        type: "wellnest",
-        name: "WELLNEST HOME",
+        type: "high_performance_home",
+        name: "高性能住宅",
         icon: Home,
         total: 82500000,
         breakdown: {
@@ -158,8 +158,8 @@ export default function HousingLCCPage() {
     ],
     conservative: [
       {
-        type: "wellnest",
-        name: "WELLNEST HOME",
+        type: "high_performance_home",
+        name: "高性能住宅",
         icon: Home,
         total: 92000000,
         breakdown: {
@@ -220,8 +220,8 @@ export default function HousingLCCPage() {
     ],
     optimistic: [
       {
-        type: "wellnest",
-        name: "WELLNEST HOME",
+        type: "high_performance_home",
+        name: "高性能住宅",
         icon: Home,
         total: 75000000,
         breakdown: {
@@ -813,7 +813,7 @@ export default function HousingLCCPage() {
                           className="py-2 text-right font-medium"
                         >
                           {housing.name.includes("HOME")
-                            ? "WELLNEST"
+                            ? "高性能住宅"
                             : housing.name}
                         </th>
                       ))}
