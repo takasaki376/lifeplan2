@@ -1,25 +1,20 @@
+import { openDB, type IDBPDatabase, type IDBPTransaction } from "idb";
 import { DB_NAME, DB_VERSION, StoreName, upgradeDb } from "./schema";
 
-let dbPromise: Promise<IDBDatabase> | null = null;
+type DbInstance = IDBPDatabase<unknown>;
+type DbTx<M extends IDBTransactionMode = IDBTransactionMode> = IDBPTransaction<
+  unknown,
+  StoreName[],
+  M
+>;
+
+let dbPromise: Promise<DbInstance> | null = null;
 
 type ListOptions = {
   range?: IDBKeyRange;
   direction?: IDBCursorDirection;
   limit?: number;
 };
-
-const requestToPromise = <T>(request: IDBRequest<T>) =>
-  new Promise<T>((resolve, reject) => {
-    request.onsuccess = () => resolve(request.result);
-    request.onerror = () => reject(request.error);
-  });
-
-const txDone = (tx: IDBTransaction) =>
-  new Promise<void>((resolve, reject) => {
-    tx.oncomplete = () => resolve();
-    tx.onerror = () => reject(tx.error);
-    tx.onabort = () => reject(tx.error);
-  });
 
 export const openDb = () => {
   if (dbPromise) return dbPromise;
@@ -29,22 +24,19 @@ export const openDb = () => {
     );
   }
 
-  dbPromise = new Promise<IDBDatabase>((resolve, reject) => {
-    const req = indexedDB.open(DB_NAME, DB_VERSION);
-    req.onupgradeneeded = () => {
-      const db = req.result;
-      const tx = req.transaction;
-      if (!tx) return;
-      upgradeDb(db, tx);
-    };
-    req.onsuccess = () => resolve(req.result);
-    req.onerror = () => reject(req.error);
+  dbPromise = openDB(DB_NAME, DB_VERSION, {
+    upgrade: (db, _oldVersion, _newVersion, tx) => {
+      upgradeDb(db as unknown as IDBDatabase, tx as unknown as IDBTransaction);
+    },
   });
 
   return dbPromise;
 };
 
-const getStore = async (storeName: StoreName, mode: IDBTransactionMode) => {
+const getStore = async <M extends IDBTransactionMode>(
+  storeName: StoreName,
+  mode: M,
+) => {
   const db = await openDb();
   const tx = db.transaction(storeName, mode);
   const store = tx.objectStore(storeName);
@@ -56,19 +48,20 @@ export const get = async <T>(
   key: IDBValidKey,
 ): Promise<T | undefined> => {
   const { store, tx } = await getStore(storeName, "readonly");
-  const result = await requestToPromise<T | undefined>(store.get(key));
-  await txDone(tx);
+  const result = (await store.get(key)) as T | undefined;
+  await tx.done;
   return result;
 };
 
 export const put = async <T>(
   storeName: StoreName,
   value: T,
+  key?: IDBValidKey,
 ): Promise<IDBValidKey> => {
   const { store, tx } = await getStore(storeName, "readwrite");
-  const key = await requestToPromise<IDBValidKey>(store.put(value as any));
-  await txDone(tx);
-  return key;
+  const storedKey = await store.put(value as T, key);
+  await tx.done;
+  return storedKey;
 };
 
 export const del = async (
@@ -76,8 +69,8 @@ export const del = async (
   key: IDBValidKey,
 ): Promise<void> => {
   const { store, tx } = await getStore(storeName, "readwrite");
-  await requestToPromise(store.delete(key));
-  await txDone(tx);
+  await store.delete(key);
+  await tx.done;
 };
 
 export const listAll = async <T>(
@@ -86,24 +79,15 @@ export const listAll = async <T>(
 ): Promise<T[]> => {
   const { store, tx } = await getStore(storeName, "readonly");
   const results: T[] = [];
-  const req = store.openCursor(options.range, options.direction);
-  await new Promise<void>((resolve, reject) => {
-    req.onerror = () => reject(req.error);
-    req.onsuccess = () => {
-      const cursor = req.result;
-      if (!cursor) {
-        resolve();
-        return;
-      }
-      results.push(cursor.value as T);
-      if (options.limit && results.length >= options.limit) {
-        resolve();
-        return;
-      }
-      cursor.continue();
-    };
-  });
-  await txDone(tx);
+  let cursor = await store.openCursor(options.range, options.direction);
+  while (cursor) {
+    results.push(cursor.value as T);
+    if (options.limit && results.length >= options.limit) {
+      break;
+    }
+    cursor = await cursor.continue();
+  }
+  await tx.done;
   return results;
 };
 
@@ -114,8 +98,8 @@ export const getByIndex = async <T>(
 ): Promise<T | undefined> => {
   const { store, tx } = await getStore(storeName, "readonly");
   const index = store.index(indexName);
-  const result = await requestToPromise<T | undefined>(index.get(key));
-  await txDone(tx);
+  const result = (await index.get(key)) as T | undefined;
+  await tx.done;
   return result;
 };
 
@@ -127,37 +111,62 @@ export const listByIndex = async <T>(
   const { store, tx } = await getStore(storeName, "readonly");
   const index = store.index(indexName);
   const results: T[] = [];
-  const range = options.range ?? (options.key ? IDBKeyRange.only(options.key) : undefined);
-  const req = index.openCursor(range, options.direction);
-  await new Promise<void>((resolve, reject) => {
-    req.onerror = () => reject(req.error);
-    req.onsuccess = () => {
-      const cursor = req.result;
-      if (!cursor) {
-        resolve();
-        return;
-      }
-      results.push(cursor.value as T);
-      if (options.limit && results.length >= options.limit) {
-        resolve();
-        return;
-      }
-      cursor.continue();
-    };
-  });
-  await txDone(tx);
+  const range =
+    options.range ?? (options.key ? IDBKeyRange.only(options.key) : undefined);
+  let cursor = await index.openCursor(range, options.direction);
+  while (cursor) {
+    results.push(cursor.value as T);
+    if (options.limit && results.length >= options.limit) {
+      break;
+    }
+    cursor = await cursor.continue();
+  }
+  await tx.done;
   return results;
 };
 
-export const withTx = async <T>(
+export const withTx = async <T, M extends IDBTransactionMode>(
   storeNames: StoreName | StoreName[],
-  mode: IDBTransactionMode,
-  fn: (tx: IDBTransaction) => Promise<T> | T,
+  mode: M,
+  fn: (tx: DbTx<M>) => Promise<T> | T,
 ): Promise<T> => {
   const db = await openDb();
   const names = Array.isArray(storeNames) ? storeNames : [storeNames];
   const tx = db.transaction(names, mode);
-  const result = await Promise.resolve(fn(tx));
-  await txDone(tx);
-  return result;
+  try {
+    const result = await Promise.resolve(fn(tx));
+    await tx.done;
+    return result;
+  } catch (error) {
+    tx.abort();
+    throw error;
+  }
+};
+
+export const txGet = async <T>(
+  tx: DbTx,
+  storeName: StoreName,
+  key: IDBValidKey,
+): Promise<T | undefined> => {
+  const store = tx.objectStore(storeName);
+  return (await store.get(key)) as T | undefined;
+};
+
+export const txPut = async <T>(
+  tx: DbTx<"readwrite">,
+  storeName: StoreName,
+  value: T,
+  key?: IDBValidKey,
+): Promise<IDBValidKey> => {
+  const store = tx.objectStore(storeName);
+  return store.put(value as T, key);
+};
+
+export const txDel = async (
+  tx: DbTx<"readwrite">,
+  storeName: StoreName,
+  key: IDBValidKey,
+): Promise<void> => {
+  const store = tx.objectStore(storeName);
+  await store.delete(key);
 };
