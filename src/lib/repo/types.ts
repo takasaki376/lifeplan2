@@ -45,6 +45,13 @@ export class RepoError extends Error {
   }
 }
 
+export class RepoNotFoundError extends RepoError {
+  constructor(entity: string, meta?: RepoErrorMeta) {
+    super("not_found", { entity, meta });
+    this.name = "RepoNotFoundError";
+  }
+}
+
 export type PlanListParams = {
   userId?: Id;
   status?: Plan["status"];

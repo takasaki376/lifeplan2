@@ -139,7 +139,8 @@ export const withTx = async <T, M extends IDBTransactionMode>(
     await tx.done;
     return result;
   } catch (error) {
-    tx.abort();
+    const abort = (tx as { abort?: () => void }).abort;
+    if (abort) abort();
     throw error;
   }
 };
@@ -154,20 +155,28 @@ export const txGet = async <T>(
 };
 
 export const txPut = async <T>(
-  tx: DbTx<"readwrite">,
+  tx: DbTx,
   storeName: StoreName,
   value: T,
   key?: IDBValidKey,
 ): Promise<IDBValidKey> => {
   const store = tx.objectStore(storeName);
-  return store.put(value as T, key);
+  const put = store.put;
+  if (typeof put !== "function") {
+    throw new Error("IndexedDB store.put is not available.");
+  }
+  return put.call(store, value as T, key);
 };
 
 export const txDel = async (
-  tx: DbTx<"readwrite">,
+  tx: DbTx,
   storeName: StoreName,
   key: IDBValidKey,
 ): Promise<void> => {
   const store = tx.objectStore(storeName);
-  await store.delete(key);
+  const del = store.delete;
+  if (typeof del !== "function") {
+    throw new Error("IndexedDB store.delete is not available.");
+  }
+  await del.call(store, key);
 };
