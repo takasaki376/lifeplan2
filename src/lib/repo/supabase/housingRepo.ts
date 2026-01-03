@@ -1,4 +1,9 @@
-import type { HousingAssumptions, HousingType, Id } from "../../domain/types";
+import type {
+  HousingAssumptions,
+  HousingType,
+  Id,
+  ScenarioPreset,
+} from "../../domain/types";
 import type { HousingAssumptionsInput, RepoContext } from "../types";
 import type { HousingRepository } from "../interfaces/housingRepo";
 import { notImplemented } from "./utils";
@@ -37,7 +42,7 @@ export class SupabaseHousingRepository implements HousingRepository {
   async applyPreset(
     _planVersionId: Id,
     _housingType: HousingType,
-    _preset: "conservative" | "base" | "optimistic",
+    _preset: ScenarioPreset,
     _ctx?: RepoContext,
   ): Promise<void> {
     return notImplemented("HousingRepository.applyPreset");
