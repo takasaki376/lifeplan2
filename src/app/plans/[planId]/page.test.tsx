@@ -192,6 +192,30 @@ describe("PlanDashboardPage", () => {
     );
   });
 
+  it("shows loading state while data is being fetched", () => {
+    planGetMock.mockReturnValue(new Promise(() => {}));
+    versionGetCurrentMock.mockReturnValue(new Promise(() => {}));
+
+    render(<PlanDashboardPage />);
+
+    expect(screen.getByText("読み込み中...")).toBeInTheDocument();
+  });
+
+  it("shows error state when loading fails", async () => {
+    planGetMock.mockRejectedValue(new Error("load error"));
+    render(<PlanDashboardPage />);
+
+    await waitFor(() =>
+      expect(screen.getAllByText("読み込みに失敗しました").length).toBeGreaterThan(
+        0,
+      ),
+    );
+    expect(screen.getByRole("link", { name: "プラン一覧へ戻る" })).toHaveAttribute(
+      "href",
+      "/",
+    );
+  });
+
   it("shows onboarding card when current month data is missing", async () => {
     monthlyGetByYmMock.mockResolvedValue(undefined);
     render(<PlanDashboardPage />);
@@ -216,6 +240,29 @@ describe("PlanDashboardPage", () => {
         screen.getByText("住宅LCC比較を使うには前提の設定が必要です"),
       ).toBeInTheDocument(),
     );
+    expect(
+      screen.getByRole("link", { name: "住宅前提を設定" }),
+    ).toHaveAttribute("href", "/plans/plan-123/housing/assumptions");
+    expect(screen.getByRole("link", { name: "比較トップへ" })).toHaveAttribute(
+      "href",
+      "/plans/plan-123/housing",
+    );
+  });
+
+  it("shows housing setup CTA when assumptions are incomplete", async () => {
+    housingListByVersionMock.mockResolvedValue([
+      makeHousing("ver-1", "high_performance_home", true),
+      makeHousing("ver-1", "detached", false),
+      makeHousing("ver-1", "condo", false),
+    ]);
+
+    render(<PlanDashboardPage />);
+
+    await waitFor(() =>
+      expect(
+        screen.getByText("住宅LCC比較を使うには前提の設定が必要です"),
+      ).toBeInTheDocument(),
+    );
   });
 
   it("shows housing selection CTA when no type is selected", async () => {
@@ -232,6 +279,10 @@ describe("PlanDashboardPage", () => {
       expect(
         screen.getByText("比較する住宅タイプを選択しましょう"),
       ).toBeInTheDocument(),
+    );
+    expect(screen.getByRole("link", { name: "住宅LCC比較へ" })).toHaveAttribute(
+      "href",
+      "/plans/plan-123/housing",
     );
   });
 
@@ -250,6 +301,16 @@ describe("PlanDashboardPage", () => {
       expect(
         screen.getByText("イベントを追加すると見通しが良くなります"),
       ).toBeInTheDocument(),
+    );
+    const eventLinks = screen.getAllByRole("link", { name: "イベントを追加" });
+    expect(
+      eventLinks.some(
+        (link) => link.getAttribute("href") === "/plans/plan-123/events/new",
+      ),
+    ).toBe(true);
+    expect(screen.getByRole("link", { name: "イベント一覧" })).toHaveAttribute(
+      "href",
+      "/plans/plan-123/events",
     );
   });
 
@@ -273,5 +334,7 @@ describe("PlanDashboardPage", () => {
     expect(
       screen.queryByText("まずは今月の合計を入力しましょう"),
     ).toBeNull();
+    expect(screen.getByText("資産・負債スナップショット")).toBeInTheDocument();
+    expect(screen.getByText("将来見通し（簡易）")).toBeInTheDocument();
   });
 });
