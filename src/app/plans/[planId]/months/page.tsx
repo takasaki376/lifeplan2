@@ -32,11 +32,15 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import {
-  Tooltip,
-  TooltipContent,
-  TooltipProvider,
-  TooltipTrigger,
-} from "@/components/ui/tooltip";
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import {
   Accordion,
@@ -49,6 +53,7 @@ import { Separator } from "@/components/ui/separator";
 import type { MonthlyRecord, Plan, YearMonth } from "@/lib/domain/types";
 import { formatYearMonth, formatYen, getCurrentYearMonth } from "@/lib/format";
 import { createRepositories } from "@/lib/repo/factory";
+import { RepoError, RepoNotFoundError } from "@/lib/repo/types";
 
 type MonthRow = {
   ym: YearMonth;
@@ -56,6 +61,11 @@ type MonthRow = {
   status: "entered" | "missing";
   record?: MonthlyRecord;
   isCurrentMonth: boolean;
+};
+
+type DeleteTarget = {
+  ym: YearMonth;
+  label: string;
 };
 
 const getYearFromYm = (ym: string) => Number(ym.slice(0, 4));
@@ -87,11 +97,13 @@ export default function MonthlyListPage() {
   const [yearRecords, setYearRecords] = useState<MonthlyRecord[]>([]);
   const [years, setYears] = useState<number[]>([]);
   const [selectedYear, setSelectedYear] = useState<number | null>(null);
-  const [statusFilter, setStatusFilter] = useState<"all" | "missing" | "entered">(
-    "all",
-  );
+  const [statusFilter, setStatusFilter] = useState<
+    "all" | "missing" | "entered"
+  >("all");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [confirmDelete, setConfirmDelete] = useState<DeleteTarget | null>(null);
+  const [actionLoading, setActionLoading] = useState<YearMonth | null>(null);
 
   const loadYearRecords = useCallback(
     async (year: number) => {
@@ -108,7 +120,30 @@ export default function MonthlyListPage() {
         toast.error("月次データの読み込みに失敗しました");
       }
     },
-    [planId, repos],
+    [planId, repos]
+  );
+
+  const refreshRecords = useCallback(
+    async (yearOverride?: number | null) => {
+      const records = await repos.monthly.listByPlan(planId);
+      setAllRecords(records);
+      const recordYears = Array.from(
+        new Set(records.map((record) => getYearFromYm(record.ym)))
+      ).sort((a, b) => b - a);
+      const fallbackYears = buildFallbackYears(currentYear).sort(
+        (a, b) => b - a
+      );
+      const resolvedYears =
+        recordYears.length > 0 ? recordYears : fallbackYears;
+      setYears(resolvedYears);
+      const resolvedYear =
+        yearOverride && resolvedYears.includes(yearOverride)
+          ? yearOverride
+          : resolvedYears[0];
+      setSelectedYear(resolvedYear);
+      await loadYearRecords(resolvedYear);
+    },
+    [currentYear, loadYearRecords, planId, repos]
   );
 
   useEffect(() => {
@@ -116,28 +151,13 @@ export default function MonthlyListPage() {
       setLoading(true);
       setError(null);
       try {
-        const [planData, records] = await Promise.all([
-          repos.plan.get(planId),
-          repos.monthly.listByPlan(planId),
-        ]);
+        const planData = await repos.plan.get(planId);
         if (!planData) {
           setError("プランが見つかりません");
           return;
         }
         setPlan(planData);
-        setAllRecords(records);
-        const recordYears = Array.from(
-          new Set(records.map((record) => getYearFromYm(record.ym))),
-        ).sort((a, b) => b - a);
-        const fallbackYears = buildFallbackYears(currentYear).sort((a, b) => b - a);
-        const resolvedYears =
-          recordYears.length > 0 ? recordYears : fallbackYears;
-        setYears(resolvedYears);
-
-        const initialYear =
-          recordYears.length > 0 ? recordYears[0] : currentYear;
-        setSelectedYear(initialYear);
-        await loadYearRecords(initialYear);
+        await refreshRecords(currentYear);
       } catch (fetchError) {
         console.error(fetchError);
         setError("月次データの読み込みに失敗しました");
@@ -147,14 +167,17 @@ export default function MonthlyListPage() {
       }
     };
     void load();
-  }, [currentYear, loadYearRecords, planId, repos]);
+  }, [currentYear, planId, refreshRecords, repos]);
 
   const months = useMemo<MonthRow[]>(() => {
     if (selectedYear === null) return [];
     const byYm = new Map(yearRecords.map((record) => [record.ym, record]));
     return Array.from({ length: 12 }, (_, index) => {
       const month = index + 1;
-      const ym = `${selectedYear}-${String(month).padStart(2, "0")}` as YearMonth;
+      const ym = `${selectedYear}-${String(month).padStart(
+        2,
+        "0"
+      )}` as YearMonth;
       const record = byYm.get(ym);
       const label = formatYearMonth(ym);
       return {
@@ -175,11 +198,51 @@ export default function MonthlyListPage() {
     return months.filter((month) => month.status === "entered");
   }, [months, statusFilter]);
 
-  const enteredCount = months.filter((month) => month.status === "entered").length;
+  const enteredCount = months.filter(
+    (month) => month.status === "entered"
+  ).length;
 
-  const handleCopyPreviousMonth = () => {
-    toast.info("前月コピーは準備中です");
-  };
+  const handleCopyPreviousMonth = useCallback(
+    async (ym: YearMonth) => {
+      setActionLoading(ym);
+      try {
+        await repos.monthly.copyFromPreviousMonth(planId, ym);
+        toast.success("前月コピーが完了しました");
+        await refreshRecords(selectedYear);
+      } catch (copyError) {
+        if (copyError instanceof RepoNotFoundError) {
+          toast.info("前月のデータが見つかりません");
+        } else if (
+          copyError instanceof RepoError &&
+          copyError.op === "monthly_copy_exists"
+        ) {
+          toast.info("前月のデータが既に存在します");
+        } else {
+          console.error(copyError);
+          toast.error("前月コピーに失敗しました");
+        }
+      } finally {
+        setActionLoading(null);
+      }
+    },
+    [planId, refreshRecords, repos, selectedYear]
+  );
+
+  const handleDelete = useCallback(async () => {
+    if (!confirmDelete) return;
+    setActionLoading(confirmDelete.ym);
+    try {
+      await repos.monthly.deleteByYm(planId, confirmDelete.ym);
+      toast.success("月次データを削除しました");
+      await refreshRecords(selectedYear);
+    } catch (deleteError) {
+      console.error(deleteError);
+      toast.error("月次データの削除に失敗しました");
+    } finally {
+      setActionLoading(null);
+      setConfirmDelete(null);
+    }
+  }, [confirmDelete, planId, refreshRecords, repos, selectedYear]);
 
   const handleYearChange = (value: string) => {
     const year = Number(value);
@@ -270,7 +333,9 @@ export default function MonthlyListPage() {
                   まずは今月の合計（収入/支出/資産/負債）を入力しましょう
                 </p>
                 <Button asChild>
-                  <Link href={`/plans/${planId}/months/current`}>今月を入力</Link>
+                  <Link href={`/plans/${planId}/months/current`}>
+                    今月を入力
+                  </Link>
                 </Button>
               </Card>
             )}
@@ -424,11 +489,15 @@ export default function MonthlyListPage() {
                             </div>
                           )}
                         </div>
-
                         {/* Actions */}
                         <div className="flex items-center gap-2 ml-auto">
                           {month.status === "entered" ? (
-                            <Button size="sm" variant="outline" asChild>
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              asChild
+                              disabled={actionLoading === month.ym}
+                            >
                               <Link
                                 href={`/plans/${planId}/months/${month.ym}`}
                               >
@@ -436,7 +505,11 @@ export default function MonthlyListPage() {
                               </Link>
                             </Button>
                           ) : (
-                            <Button size="sm" asChild>
+                            <Button
+                              size="sm"
+                              asChild
+                              disabled={actionLoading === month.ym}
+                            >
                               <Link
                                 href={`/plans/${planId}/months/${month.ym}`}
                               >
@@ -445,7 +518,13 @@ export default function MonthlyListPage() {
                             </Button>
                           )}
 
-                          <Button size="sm" variant="ghost" asChild>
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            asChild
+                            className="hidden md:inline-flex"
+                            disabled={actionLoading === month.ym}
+                          >
                             <Link
                               href={`/plans/${planId}/months/${month.ym}/detail`}
                             >
@@ -453,37 +532,55 @@ export default function MonthlyListPage() {
                             </Link>
                           </Button>
 
-                          <TooltipProvider>
-                            <Tooltip>
-                              <TooltipTrigger asChild>
-                                <Button
-                                  size="sm"
-                                  variant="ghost"
-                                  onClick={handleCopyPreviousMonth}
-                                >
-                                  <Copy className="h-4 w-4" />
-                                </Button>
-                              </TooltipTrigger>
-                              <TooltipContent>
-                                <p>前月の値をコピー</p>
-                              </TooltipContent>
-                            </Tooltip>
-                          </TooltipProvider>
-
                           <DropdownMenu>
                             <DropdownMenuTrigger asChild>
-                              <Button size="sm" variant="ghost">
+                              <Button
+                                size="sm"
+                                variant="ghost"
+                                disabled={actionLoading === month.ym}
+                                data-testid={`month-actions-${month.ym}`}
+                              >
                                 <MoreVertical className="h-4 w-4" />
                               </Button>
                             </DropdownMenuTrigger>
                             <DropdownMenuContent align="end">
-                              <DropdownMenuItem disabled>
-                                <Copy className="h-4 w-4 mr-2" />
-                                この月を複製
+                              <DropdownMenuItem asChild className="md:hidden">
+                                <Link
+                                  href={`/plans/${planId}/months/${month.ym}/detail`}
+                                >
+                                  <FileText className="h-4 w-4 mr-2" />
+                                  詳細
+                                </Link>
                               </DropdownMenuItem>
-                              <DropdownMenuItem disabled className="text-destructive">
+                              <DropdownMenuItem
+                                onClick={() =>
+                                  handleCopyPreviousMonth(month.ym)
+                                }
+                                disabled={
+                                  month.status !== "missing" ||
+                                  actionLoading === month.ym
+                                }
+                                data-testid={`month-copy-${month.ym}`}
+                              >
+                                <Copy className="h-4 w-4 mr-2" />
+                                前月をコピー
+                              </DropdownMenuItem>
+                              <DropdownMenuItem
+                                onClick={() =>
+                                  setConfirmDelete({
+                                    ym: month.ym,
+                                    label: month.label,
+                                  })
+                                }
+                                disabled={
+                                  month.status !== "entered" ||
+                                  actionLoading === month.ym
+                                }
+                                className="text-destructive focus:text-destructive"
+                                data-testid={`month-delete-${month.ym}`}
+                              >
                                 <Trash2 className="h-4 w-4 mr-2" />
-                                データを削除
+                                削除
                               </DropdownMenuItem>
                             </DropdownMenuContent>
                           </DropdownMenu>
@@ -522,7 +619,9 @@ export default function MonthlyListPage() {
                                   資産残高
                                 </div>
                                 <div className="font-semibold text-blue-900">
-                                  {formatYenOrDash(month.record?.assetsBalanceYen)}
+                                  {formatYenOrDash(
+                                    month.record?.assetsBalanceYen
+                                  )}
                                 </div>
                               </div>
                               <div className="p-3 bg-orange-50 border border-orange-200 rounded-lg">
@@ -531,7 +630,7 @@ export default function MonthlyListPage() {
                                 </div>
                                 <div className="font-semibold text-orange-900">
                                   {formatYenOrDash(
-                                    month.record?.liabilitiesBalanceYen,
+                                    month.record?.liabilitiesBalanceYen
                                   )}
                                 </div>
                               </div>
@@ -551,6 +650,40 @@ export default function MonthlyListPage() {
           </>
         )}
       </div>
+
+      <AlertDialog
+        open={Boolean(confirmDelete)}
+        onOpenChange={(open) => {
+          if (!open && !actionLoading) {
+            setConfirmDelete(null);
+          }
+        }}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>
+              {confirmDelete
+                ? `${confirmDelete.label}のデータを削除しますか？`
+                : ""}
+            </AlertDialogTitle>
+            <AlertDialogDescription>
+              この操作は取り消せません。
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={Boolean(actionLoading)}>
+              キャンセル
+            </AlertDialogCancel>
+            <AlertDialogAction
+              onClick={handleDelete}
+              disabled={Boolean(actionLoading)}
+              data-testid="confirm-delete"
+            >
+              削除する
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }

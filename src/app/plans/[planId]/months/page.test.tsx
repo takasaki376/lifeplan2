@@ -6,6 +6,8 @@ import type { MonthlyRecord, Plan } from "@/lib/domain/types";
 import MonthlyListPage from "./page";
 
 const listByPlanMock = vi.fn();
+const copyFromPreviousMonthMock = vi.fn();
+const deleteByYmMock = vi.fn();
 const planGetMock = vi.fn();
 
 vi.mock("next/navigation", () => ({
@@ -29,6 +31,8 @@ vi.mock("@/lib/repo/factory", () => ({
     },
     monthly: {
       listByPlan: listByPlanMock,
+      copyFromPreviousMonth: copyFromPreviousMonthMock,
+      deleteByYm: deleteByYmMock,
     },
   }),
 }));
@@ -37,15 +41,16 @@ vi.mock("@/lib/format", () => ({
   getCurrentYearMonth: () => "2026-01",
   formatYearMonth: (ym: string) => {
     const [year, month] = ym.split("-");
-    return `${year}年${Number(month)}月`;
+    return `${year}-${month}`;
   },
-  formatYen: (value: number) => `${value}円`,
+  formatYen: (value: number) => `${value}yen`,
 }));
 
 vi.mock("sonner", () => ({
   toast: {
     error: vi.fn(),
     info: vi.fn(),
+    success: vi.fn(),
   },
 }));
 
@@ -111,7 +116,9 @@ describe("MonthlyListPage", () => {
   beforeEach(() => {
     planGetMock.mockReset();
     listByPlanMock.mockReset();
-    planGetMock.mockResolvedValue(makePlan({ id: "plan-123", name: "テスト" }));
+    copyFromPreviousMonthMock.mockReset();
+    deleteByYmMock.mockReset();
+    planGetMock.mockResolvedValue(makePlan({ id: "plan-123", name: "Plan A" }));
 
     const records = [
       makeRecord("plan-123", "2026-01"),
@@ -135,14 +142,12 @@ describe("MonthlyListPage", () => {
     render(<MonthlyListPage />);
 
     await waitFor(() =>
-      expect(screen.getByRole("link", { name: "テスト" })).toBeInTheDocument(),
+      expect(screen.getByRole("link", { name: "Plan A" })).toBeInTheDocument(),
     );
 
-    expect(screen.getByText("入力済み:")).toBeInTheDocument();
     expect(screen.getByText("2 / 12")).toBeInTheDocument();
-    expect(screen.getByText("今月")).toBeInTheDocument();
 
-    const monthLabels = screen.getAllByText(/2026年/);
+    const monthLabels = screen.getAllByText(/^2026-/);
     expect(monthLabels.length).toBeGreaterThanOrEqual(12);
   });
 
@@ -151,14 +156,51 @@ describe("MonthlyListPage", () => {
     render(<MonthlyListPage />);
 
     await waitFor(() =>
-      expect(screen.getByRole("link", { name: "テスト" })).toBeInTheDocument(),
+      expect(screen.getByRole("link", { name: "Plan A" })).toBeInTheDocument(),
     );
 
     const tabs = screen.getAllByRole("tab");
     await user.click(tabs[1]);
 
     await waitFor(() =>
-      expect(screen.queryByRole("button", { name: "編集" })).toBeNull(),
+      expect(screen.queryByTestId("month-actions-2026-01")).toBeNull(),
+    );
+  });
+  it("copies previous month from the action menu", async () => {
+    const user = userEvent.setup();
+    copyFromPreviousMonthMock.mockResolvedValue(makeRecord("plan-123", "2026-02"));
+    render(<MonthlyListPage />);
+
+    await waitFor(() =>
+      expect(screen.getByRole("link", { name: "Plan A" })).toBeInTheDocument(),
+    );
+
+    await user.click(screen.getByTestId("month-actions-2026-02"));
+    await user.click(screen.getByTestId("month-copy-2026-02"));
+
+    await waitFor(() =>
+      expect(copyFromPreviousMonthMock).toHaveBeenCalledWith(
+        "plan-123",
+        "2026-02",
+      ),
+    );
+  });
+
+  it("deletes a month after confirmation", async () => {
+    const user = userEvent.setup();
+    deleteByYmMock.mockResolvedValue(undefined);
+    render(<MonthlyListPage />);
+
+    await waitFor(() =>
+      expect(screen.getByRole("link", { name: "Plan A" })).toBeInTheDocument(),
+    );
+
+    await user.click(screen.getByTestId("month-actions-2026-01"));
+    await user.click(screen.getByTestId("month-delete-2026-01"));
+    await user.click(screen.getByTestId("confirm-delete"));
+
+    await waitFor(() =>
+      expect(deleteByYmMock).toHaveBeenCalledWith("plan-123", "2026-01"),
     );
   });
 });
