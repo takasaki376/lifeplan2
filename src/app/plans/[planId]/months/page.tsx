@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import {
@@ -37,14 +37,7 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import {
   Accordion,
   AccordionContent,
@@ -53,112 +46,147 @@ import {
 } from "@/components/ui/accordion";
 import { toast } from "sonner";
 import { Separator } from "@/components/ui/separator";
+import type { MonthlyRecord, Plan, YearMonth } from "@/lib/domain/types";
+import { formatYearMonth, formatYen, getCurrentYearMonth } from "@/lib/format";
+import { createRepositories } from "@/lib/repo/factory";
 
-// Mock data types
-type MonthData = {
-  month: string; // "2026-01"
-  label: string; // "2026年1月"
+type MonthRow = {
+  ym: YearMonth;
+  label: string;
   status: "entered" | "missing";
-  incomeTotal?: number;
-  expenseTotal?: number;
-  assetsBalance?: number;
-  liabilitiesBalance?: number;
-  lastUpdated?: string;
-  isCurrentMonth?: boolean;
+  record?: MonthlyRecord;
+  isCurrentMonth: boolean;
 };
 
-// Mock plan
-const MOCK_PLAN = {
-  id: "plan-001",
-  name: "山田家 2026",
+const getYearFromYm = (ym: string) => Number(ym.slice(0, 4));
+
+const buildFallbackYears = (centerYear: number) =>
+  Array.from({ length: 5 }, (_, index) => centerYear - 2 + index);
+
+const formatYenOrDash = (value?: number) => {
+  if (value === null || value === undefined) return "—";
+  if (value === 0) return "0円";
+  return formatYen(value, { showDashForEmpty: false });
 };
 
-// Generate mock months for a year
-function generateMockMonths(year: number): MonthData[] {
-  const months: MonthData[] = [];
-  const currentDate = new Date();
-  const currentYear = currentDate.getFullYear();
-  const currentMonthNum = currentDate.getMonth() + 1;
-
-  for (let i = 1; i <= 12; i++) {
-    const monthStr = `${year}-${i.toString().padStart(2, "0")}`;
-    const isCurrentMonth = year === currentYear && i === currentMonthNum;
-
-    // Mock: some months have data, some don't
-    const hasData = i <= 8 || i === 10;
-
-    months.push({
-      month: monthStr,
-      label: `${year}年${i}月`,
-      status: hasData ? "entered" : "missing",
-      incomeTotal: hasData ? 450000 + Math.random() * 100000 : undefined,
-      expenseTotal: hasData ? 320000 + Math.random() * 80000 : undefined,
-      assetsBalance: hasData ? 5000000 + i * 100000 : undefined,
-      liabilitiesBalance: hasData ? 2000000 - i * 50000 : undefined,
-      lastUpdated: hasData
-        ? `${year}/${i.toString().padStart(2, "0")}/15`
-        : undefined,
-      isCurrentMonth,
-    });
-  }
-
-  return months;
-}
-
-const formatYen = (value: number) => {
-  return new Intl.NumberFormat("ja-JP", {
-    style: "currency",
-    currency: "JPY",
-    maximumFractionDigits: 0,
-  }).format(value);
+const formatDateShort = (value: string) => {
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) return value;
+  return parsed.toLocaleDateString("ja-JP");
 };
 
 export default function MonthlyListPage() {
   const params = useParams();
   const planId = params.planId as string;
+  const repos = useMemo(() => createRepositories(), []);
+  const currentYm = getCurrentYearMonth();
+  const currentYear = getYearFromYm(currentYm);
 
-  const [selectedYear, setSelectedYear] = useState(2026);
-  const [statusFilter, setStatusFilter] = useState<
-    "all" | "missing" | "entered"
-  >("all");
-  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
-  const [monthToDelete, setMonthToDelete] = useState<string | null>(null);
+  const [plan, setPlan] = useState<Plan | null>(null);
+  const [allRecords, setAllRecords] = useState<MonthlyRecord[]>([]);
+  const [yearRecords, setYearRecords] = useState<MonthlyRecord[]>([]);
+  const [years, setYears] = useState<number[]>([]);
+  const [selectedYear, setSelectedYear] = useState<number | null>(null);
+  const [statusFilter, setStatusFilter] = useState<"all" | "missing" | "entered">(
+    "all",
+  );
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
-  const allMonths = generateMockMonths(selectedYear);
+  const loadYearRecords = useCallback(
+    async (year: number) => {
+      setError(null);
+      try {
+        const records = await repos.monthly.listByPlan(planId, {
+          year,
+          sort: "ymAsc",
+        });
+        setYearRecords(records);
+      } catch (fetchError) {
+        console.error(fetchError);
+        setError("月次データの読み込みに失敗しました");
+        toast.error("月次データの読み込みに失敗しました");
+      }
+    },
+    [planId, repos],
+  );
 
-  // Filter months based on status
-  const filteredMonths = allMonths.filter((month) => {
-    if (statusFilter === "all") return true;
-    if (statusFilter === "missing") return month.status === "missing";
-    if (statusFilter === "entered") return month.status === "entered";
-    return true;
-  });
+  useEffect(() => {
+    const load = async () => {
+      setLoading(true);
+      setError(null);
+      try {
+        const [planData, records] = await Promise.all([
+          repos.plan.get(planId),
+          repos.monthly.listByPlan(planId),
+        ]);
+        if (!planData) {
+          setError("プランが見つかりません");
+          return;
+        }
+        setPlan(planData);
+        setAllRecords(records);
+        const recordYears = Array.from(
+          new Set(records.map((record) => getYearFromYm(record.ym))),
+        ).sort((a, b) => b - a);
+        const fallbackYears = buildFallbackYears(currentYear).sort((a, b) => b - a);
+        const resolvedYears =
+          recordYears.length > 0 ? recordYears : fallbackYears;
+        setYears(resolvedYears);
 
-  const enteredCount = allMonths.filter((m) => m.status === "entered").length;
+        const initialYear =
+          recordYears.length > 0 ? recordYears[0] : currentYear;
+        setSelectedYear(initialYear);
+        await loadYearRecords(initialYear);
+      } catch (fetchError) {
+        console.error(fetchError);
+        setError("月次データの読み込みに失敗しました");
+        toast.error("月次データの読み込みに失敗しました");
+      } finally {
+        setLoading(false);
+      }
+    };
+    void load();
+  }, [currentYear, loadYearRecords, planId, repos]);
 
-  const handleCopyPreviousMonth = (currentMonth: string) => {
-    toast.success("前月の値をコピーしました", {
-      description: `${currentMonth}にデータを反映しました`,
+  const months = useMemo<MonthRow[]>(() => {
+    if (selectedYear === null) return [];
+    const byYm = new Map(yearRecords.map((record) => [record.ym, record]));
+    return Array.from({ length: 12 }, (_, index) => {
+      const month = index + 1;
+      const ym = `${selectedYear}-${String(month).padStart(2, "0")}` as YearMonth;
+      const record = byYm.get(ym);
+      const label = formatYearMonth(ym);
+      return {
+        ym,
+        label: label && label !== "?" ? label : `${selectedYear}年${month}月`,
+        status: record ? "entered" : "missing",
+        record,
+        isCurrentMonth: ym === currentYm,
+      };
     });
-  };
+  }, [currentYm, selectedYear, yearRecords]);
 
-  const handleDeleteMonth = (month: string) => {
-    setMonthToDelete(month);
-    setDeleteDialogOpen(true);
-  };
-
-  const confirmDelete = () => {
-    if (monthToDelete) {
-      toast.success("月次データを削除しました", {
-        description: `${monthToDelete}のデータを削除しました`,
-      });
-      setDeleteDialogOpen(false);
-      setMonthToDelete(null);
+  const filteredMonths = useMemo(() => {
+    if (statusFilter === "all") return months;
+    if (statusFilter === "missing") {
+      return months.filter((month) => month.status === "missing");
     }
+    return months.filter((month) => month.status === "entered");
+  }, [months, statusFilter]);
+
+  const enteredCount = months.filter((month) => month.status === "entered").length;
+
+  const handleCopyPreviousMonth = () => {
+    toast.info("前月コピーは準備中です");
   };
 
-  // Check if it's empty state (no data at all)
-  const isEmpty = enteredCount === 0;
+  const handleYearChange = (value: string) => {
+    const year = Number(value);
+    if (!Number.isFinite(year)) return;
+    setSelectedYear(year);
+    void loadYearRecords(year);
+  };
 
   return (
     <div className="min-h-screen bg-muted/30">
@@ -175,7 +203,7 @@ export default function MonthlyListPage() {
               href={`/plans/${planId}`}
               className="hover:text-foreground transition-colors"
             >
-              {MOCK_PLAN.name}
+              {plan?.name ?? "プラン"}
             </Link>
             <ChevronRight className="h-4 w-4" />
             <span className="text-foreground">月次</span>
@@ -221,22 +249,32 @@ export default function MonthlyListPage() {
 
       {/* Main content */}
       <div className="container max-w-5xl py-8">
-        {isEmpty ? (
-          // Empty state
-          <Card className="p-12 text-center">
-            <Calendar className="h-16 w-16 mx-auto mb-4 text-muted-foreground" />
-            <h2 className="text-2xl font-semibold mb-2">
-              まだ月次データがありません
-            </h2>
-            <p className="text-muted-foreground mb-6">
-              まずは今月の合計（収入/支出/資産/負債）を入力しましょう
-            </p>
-            <Button asChild size="lg">
-              <Link href={`/plans/${planId}/months/current`}>今月を入力</Link>
-            </Button>
+        {error ? (
+          <Alert variant="destructive">
+            <AlertTitle>読み込みに失敗しました</AlertTitle>
+            <AlertDescription>{error}</AlertDescription>
+          </Alert>
+        ) : loading ? (
+          <Card className="p-8 text-center text-sm text-muted-foreground">
+            読み込み中...
           </Card>
         ) : (
           <>
+            {!allRecords.length && (
+              <Card className="p-8 text-center mb-6">
+                <Calendar className="h-10 w-10 mx-auto mb-3 text-muted-foreground" />
+                <h2 className="text-lg font-semibold mb-2">
+                  まだ月次データがありません
+                </h2>
+                <p className="text-muted-foreground mb-4">
+                  まずは今月の合計（収入/支出/資産/負債）を入力しましょう
+                </p>
+                <Button asChild>
+                  <Link href={`/plans/${planId}/months/current`}>今月を入力</Link>
+                </Button>
+              </Card>
+            )}
+
             {/* Control bar */}
             <Card className="p-4 mb-6">
               <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
@@ -245,16 +283,18 @@ export default function MonthlyListPage() {
                   <div className="flex items-center gap-2">
                     <span className="text-sm text-muted-foreground">年:</span>
                     <Select
-                      value={selectedYear.toString()}
-                      onValueChange={(value) => setSelectedYear(Number(value))}
+                      value={selectedYear?.toString() ?? ""}
+                      onValueChange={handleYearChange}
                     >
                       <SelectTrigger className="w-32">
-                        <SelectValue />
+                        <SelectValue placeholder="年を選択" />
                       </SelectTrigger>
                       <SelectContent>
-                        <SelectItem value="2024">2024</SelectItem>
-                        <SelectItem value="2025">2025</SelectItem>
-                        <SelectItem value="2026">2026</SelectItem>
+                        {years.map((year) => (
+                          <SelectItem key={year} value={year.toString()}>
+                            {year}
+                          </SelectItem>
+                        ))}
                       </SelectContent>
                     </Select>
                   </div>
@@ -286,15 +326,17 @@ export default function MonthlyListPage() {
             <div className="space-y-2">
               <Accordion type="single" collapsible className="space-y-2">
                 {filteredMonths.map((month) => {
+                  const incomeTotal = month.record?.incomeTotalYen;
+                  const expenseTotal = month.record?.expenseTotalYen;
                   const net =
-                    month.incomeTotal && month.expenseTotal
-                      ? month.incomeTotal - month.expenseTotal
+                    incomeTotal !== undefined && expenseTotal !== undefined
+                      ? incomeTotal - expenseTotal
                       : undefined;
 
                   return (
                     <AccordionItem
-                      key={month.month}
-                      value={month.month}
+                      key={month.ym}
+                      value={month.ym}
                       className={`border rounded-lg overflow-hidden ${
                         month.isCurrentMonth
                           ? "bg-accent/50 border-primary"
@@ -344,8 +386,7 @@ export default function MonthlyListPage() {
                                   収入
                                 </div>
                                 <div className="font-medium">
-                                  {month.incomeTotal &&
-                                    formatYen(month.incomeTotal)}
+                                  {formatYenOrDash(incomeTotal)}
                                 </div>
                               </div>
                               <div>
@@ -353,8 +394,7 @@ export default function MonthlyListPage() {
                                   支出
                                 </div>
                                 <div className="font-medium">
-                                  {month.expenseTotal &&
-                                    formatYen(month.expenseTotal)}
+                                  {formatYenOrDash(expenseTotal)}
                                 </div>
                               </div>
                               <div>
@@ -363,16 +403,19 @@ export default function MonthlyListPage() {
                                 </div>
                                 <div
                                   className={`font-medium ${
-                                    net && net >= 0
+                                    net !== undefined && net >= 0
                                       ? "text-emerald-600"
                                       : "text-red-600"
                                   }`}
                                 >
-                                  {net !== undefined && formatYen(net)}
+                                  {formatYenOrDash(net)}
                                 </div>
                               </div>
                               <div className="text-xs text-muted-foreground">
-                                最終更新: {month.lastUpdated}
+                                最終更新:{" "}
+                                {month.record?.updatedAt
+                                  ? formatDateShort(month.record.updatedAt)
+                                  : "—"}
                               </div>
                             </>
                           ) : (
@@ -387,7 +430,7 @@ export default function MonthlyListPage() {
                           {month.status === "entered" ? (
                             <Button size="sm" variant="outline" asChild>
                               <Link
-                                href={`/plans/${planId}/months/${month.month}`}
+                                href={`/plans/${planId}/months/${month.ym}`}
                               >
                                 編集
                               </Link>
@@ -395,7 +438,7 @@ export default function MonthlyListPage() {
                           ) : (
                             <Button size="sm" asChild>
                               <Link
-                                href={`/plans/${planId}/months/${month.month}`}
+                                href={`/plans/${planId}/months/${month.ym}`}
                               >
                                 入力する
                               </Link>
@@ -404,7 +447,7 @@ export default function MonthlyListPage() {
 
                           <Button size="sm" variant="ghost" asChild>
                             <Link
-                              href={`/plans/${planId}/months/${month.month}/detail`}
+                              href={`/plans/${planId}/months/${month.ym}/detail`}
                             >
                               詳細
                             </Link>
@@ -416,9 +459,7 @@ export default function MonthlyListPage() {
                                 <Button
                                   size="sm"
                                   variant="ghost"
-                                  onClick={() =>
-                                    handleCopyPreviousMonth(month.label)
-                                  }
+                                  onClick={handleCopyPreviousMonth}
                                 >
                                   <Copy className="h-4 w-4" />
                                 </Button>
@@ -436,18 +477,11 @@ export default function MonthlyListPage() {
                               </Button>
                             </DropdownMenuTrigger>
                             <DropdownMenuContent align="end">
-                              <DropdownMenuItem
-                                onClick={() =>
-                                  handleCopyPreviousMonth(month.label)
-                                }
-                              >
+                              <DropdownMenuItem disabled>
                                 <Copy className="h-4 w-4 mr-2" />
                                 この月を複製
                               </DropdownMenuItem>
-                              <DropdownMenuItem
-                                className="text-destructive"
-                                onClick={() => handleDeleteMonth(month.label)}
-                              >
+                              <DropdownMenuItem disabled className="text-destructive">
                                 <Trash2 className="h-4 w-4 mr-2" />
                                 データを削除
                               </DropdownMenuItem>
@@ -472,8 +506,7 @@ export default function MonthlyListPage() {
                                   収入合計
                                 </div>
                                 <div className="font-semibold text-emerald-900">
-                                  {month.incomeTotal &&
-                                    formatYen(month.incomeTotal)}
+                                  {formatYenOrDash(incomeTotal)}
                                 </div>
                               </div>
                               <div className="p-3 bg-red-50 border border-red-200 rounded-lg">
@@ -481,8 +514,7 @@ export default function MonthlyListPage() {
                                   支出合計
                                 </div>
                                 <div className="font-semibold text-red-900">
-                                  {month.expenseTotal &&
-                                    formatYen(month.expenseTotal)}
+                                  {formatYenOrDash(expenseTotal)}
                                 </div>
                               </div>
                               <div className="p-3 bg-blue-50 border border-blue-200 rounded-lg">
@@ -490,8 +522,7 @@ export default function MonthlyListPage() {
                                   資産残高
                                 </div>
                                 <div className="font-semibold text-blue-900">
-                                  {month.assetsBalance &&
-                                    formatYen(month.assetsBalance)}
+                                  {formatYenOrDash(month.record?.assetsBalanceYen)}
                                 </div>
                               </div>
                               <div className="p-3 bg-orange-50 border border-orange-200 rounded-lg">
@@ -499,8 +530,9 @@ export default function MonthlyListPage() {
                                   負債残高
                                 </div>
                                 <div className="font-semibold text-orange-900">
-                                  {month.liabilitiesBalance &&
-                                    formatYen(month.liabilitiesBalance)}
+                                  {formatYenOrDash(
+                                    month.record?.liabilitiesBalanceYen,
+                                  )}
                                 </div>
                               </div>
                             </div>
@@ -519,29 +551,6 @@ export default function MonthlyListPage() {
           </>
         )}
       </div>
-
-      {/* Delete confirmation dialog */}
-      <Dialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>データを削除しますか？</DialogTitle>
-            <DialogDescription>
-              {monthToDelete}のデータを削除します。この操作は取り消せません。
-            </DialogDescription>
-          </DialogHeader>
-          <DialogFooter>
-            <Button
-              variant="outline"
-              onClick={() => setDeleteDialogOpen(false)}
-            >
-              キャンセル
-            </Button>
-            <Button variant="destructive" onClick={confirmDelete}>
-              削除する
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
     </div>
   );
 }

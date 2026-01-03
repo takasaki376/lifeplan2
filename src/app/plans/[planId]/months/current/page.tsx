@@ -78,6 +78,10 @@ export default function MonthlyInputSimplePage() {
   const [expense, setExpense] = useState<number | undefined>();
   const [assets, setAssets] = useState<number | undefined>();
   const [liabilities, setLiabilities] = useState<number | undefined>();
+  const [incomeText, setIncomeText] = useState("");
+  const [expenseText, setExpenseText] = useState("");
+  const [assetsText, setAssetsText] = useState("");
+  const [liabilitiesText, setLiabilitiesText] = useState("");
 
   // Error state
   const [errors, setErrors] = useState({
@@ -91,6 +95,9 @@ export default function MonthlyInputSimplePage() {
     if (amount === undefined || Number.isNaN(amount)) return "";
     return new Intl.NumberFormat("ja-JP").format(amount);
   };
+
+  const formatForInput = (amount?: number) =>
+    amount === undefined ? "" : formatCurrency(amount);
 
   const parseCurrency = (value: string): number | undefined =>
     parseYenInput(value);
@@ -113,16 +120,39 @@ export default function MonthlyInputSimplePage() {
 
     switch (field) {
       case "income":
+        setIncomeText(value);
         setIncome(numValue);
         break;
       case "expense":
+        setExpenseText(value);
         setExpense(numValue);
         break;
       case "assets":
+        setAssetsText(value);
         setAssets(numValue);
         break;
       case "liabilities":
+        setLiabilitiesText(value);
         setLiabilities(numValue);
+        break;
+    }
+  };
+
+  const handleInputBlur = (
+    field: "income" | "expense" | "assets" | "liabilities"
+  ) => {
+    switch (field) {
+      case "income":
+        setIncomeText(formatForInput(income));
+        break;
+      case "expense":
+        setExpenseText(formatForInput(expense));
+        break;
+      case "assets":
+        setAssetsText(formatForInput(assets));
+        break;
+      case "liabilities":
+        setLiabilitiesText(formatForInput(liabilities));
         break;
     }
   };
@@ -150,6 +180,10 @@ export default function MonthlyInputSimplePage() {
     setExpense(undefined);
     setAssets(undefined);
     setLiabilities(undefined);
+    setIncomeText("");
+    setExpenseText("");
+    setAssetsText("");
+    setLiabilitiesText("");
     try {
       const [plan, existing] = await Promise.all([
         repos.plan.get(planId),
@@ -165,6 +199,10 @@ export default function MonthlyInputSimplePage() {
       setExpense(existing?.expenseTotalYen);
       setAssets(existing?.assetsBalanceYen);
       setLiabilities(existing?.liabilitiesBalanceYen);
+      setIncomeText(formatForInput(existing?.incomeTotalYen));
+      setExpenseText(formatForInput(existing?.expenseTotalYen));
+      setAssetsText(formatForInput(existing?.assetsBalanceYen));
+      setLiabilitiesText(formatForInput(existing?.liabilitiesBalanceYen));
     } catch (error) {
       console.error(error);
       setLoadError("読み込みに失敗しました");
@@ -408,10 +446,11 @@ export default function MonthlyInputSimplePage() {
                   <div className="relative">
                     <Input
                       type="text"
-                      value={income === undefined ? "" : formatCurrency(income)}
+                      value={incomeText}
                       onChange={(e) =>
                         handleInputChange("income", e.target.value)
                       }
+                      onBlur={() => handleInputBlur("income")}
                       className="pr-8 text-right text-lg font-semibold"
                       placeholder="0"
                       aria-label="収入合計"
@@ -454,10 +493,11 @@ export default function MonthlyInputSimplePage() {
                   <div className="relative">
                     <Input
                       type="text"
-                      value={expense === undefined ? "" : formatCurrency(expense)}
+                      value={expenseText}
                       onChange={(e) =>
                         handleInputChange("expense", e.target.value)
                       }
+                      onBlur={() => handleInputBlur("expense")}
                       className="pr-8 text-right text-lg font-semibold"
                       placeholder="0"
                       aria-label="支出合計"
@@ -500,10 +540,11 @@ export default function MonthlyInputSimplePage() {
                   <div className="relative">
                     <Input
                       type="text"
-                      value={assets === undefined ? "" : formatCurrency(assets)}
+                      value={assetsText}
                       onChange={(e) =>
                         handleInputChange("assets", e.target.value)
                       }
+                      onBlur={() => handleInputBlur("assets")}
                       className="pr-8 text-right text-lg font-semibold"
                       placeholder="0"
                       aria-label="資産残高"
@@ -547,13 +588,12 @@ export default function MonthlyInputSimplePage() {
                     <Input
                       type="text"
                       value={
-                        liabilities === undefined
-                          ? ""
-                          : formatCurrency(liabilities)
+                        liabilitiesText
                       }
                       onChange={(e) =>
                         handleInputChange("liabilities", e.target.value)
                       }
+                      onBlur={() => handleInputBlur("liabilities")}
                       className="pr-8 text-right text-lg font-semibold"
                       placeholder="0"
                       aria-label="負債残高"
