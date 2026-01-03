@@ -11,9 +11,14 @@ const listByPlanMock = vi.fn();
 const copyFromPreviousMonthMock = vi.fn();
 const deleteByYmMock = vi.fn();
 const planGetMock = vi.fn();
+const pushMock = vi.fn();
+const routerMock = {
+  push: pushMock,
+};
 
 vi.mock("next/navigation", () => ({
   useParams: () => ({ planId: "plan-123" }),
+  useRouter: () => routerMock,
 }));
 
 vi.mock("next/link", () => ({
@@ -134,6 +139,7 @@ describe("MonthlyListPage", () => {
     listByPlanMock.mockReset();
     copyFromPreviousMonthMock.mockReset();
     deleteByYmMock.mockReset();
+    pushMock.mockReset();
     toastMock.error.mockReset();
     toastMock.info.mockReset();
     toastMock.success.mockReset();
@@ -203,11 +209,10 @@ describe("MonthlyListPage", () => {
       expect(screen.getByRole("link", { name: "Plan A" })).toBeInTheDocument(),
     );
 
-    const tabs = screen.getAllByRole("tab");
-    await user.click(tabs[1]);
+    await user.click(screen.getByRole("tab", { name: "未入力" }));
 
     await waitFor(() =>
-      expect(screen.queryByTestId("month-actions-2026-01")).toBeNull(),
+      expect(screen.queryAllByTestId("month-actions-2026-01")).toHaveLength(0),
     );
   });
 
@@ -219,15 +224,14 @@ describe("MonthlyListPage", () => {
       expect(screen.getByRole("link", { name: "Plan A" })).toBeInTheDocument(),
     );
 
-    const tabs = screen.getAllByRole("tab");
-    await user.click(tabs[2]);
+    await user.click(screen.getByRole("tab", { name: "入力済み" }));
 
     await waitFor(() =>
       expect(
         screen.getAllByRole("link", { name: "編集" }).length,
       ).toBeGreaterThan(0),
     );
-    expect(screen.queryByText("入力する")).toBeNull();
+    expect(screen.queryAllByText("入力する")).toHaveLength(0);
   });
 
   it("shows input/edit/detail actions for each month", async () => {

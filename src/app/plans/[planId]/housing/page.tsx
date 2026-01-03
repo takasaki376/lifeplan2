@@ -14,6 +14,9 @@ import {
   Building2,
   Building,
   KeyRound,
+  Calendar,
+  History,
+  Menu,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
@@ -24,6 +27,12 @@ import {
 } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import {
   Select,
   SelectContent,
@@ -80,6 +89,7 @@ export default function HousingLCCPage() {
   const router = useRouter();
   const planId = params.planId as string;
   const repos = useMemo(() => createRepositories(), []);
+  const tabValue = "housing";
   const [planName, setPlanName] = useState("プラン");
 
   const [scenarioKey, setScenarioKey] = useState<ScenarioKey>("base");
@@ -302,6 +312,20 @@ export default function HousingLCCPage() {
     optimistic: "楽観",
   };
 
+  const handleTabChange = (value: string) => {
+    const routes: Record<string, string> = {
+      dashboard: `/plans/${planId}`,
+      monthly: `/plans/${planId}/months`,
+      housing: `/plans/${planId}/housing`,
+      events: `/plans/${planId}/events`,
+      versions: `/plans/${planId}/versions`,
+    };
+    const next = routes[value];
+    if (next) {
+      router.push(next);
+    }
+  };
+
   if (!HAS_HOUSING_ASSUMPTIONS) {
     return (
       <div className="min-h-screen bg-muted/30">
@@ -327,6 +351,94 @@ export default function HousingLCCPage() {
             <p className="text-muted-foreground">
               前提を変えると結果も変わります。単発の答えではなく、見直しながら使う比較です。
             </p>
+          </div>
+
+          {/* Navigation Tabs */}
+          <div className="border-b bg-card mb-6">
+            <div className="px-4 sm:px-6">
+              {/* Desktop Tabs */}
+              <div className="hidden sm:block">
+                <Tabs value={tabValue} onValueChange={handleTabChange}>
+                  <TabsList className="h-auto w-full justify-start rounded-none border-0 bg-transparent p-0">
+                    <TabsTrigger
+                      value="dashboard"
+                      className="gap-2 rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent data-[state=active]:shadow-none"
+                    >
+                      <Home className="h-4 w-4" />
+                      ダッシュボード
+                    </TabsTrigger>
+                    <TabsTrigger
+                      value="monthly"
+                      className="gap-2 rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent data-[state=active]:shadow-none"
+                    >
+                      <Calendar className="h-4 w-4" />
+                      月次
+                    </TabsTrigger>
+                    <TabsTrigger
+                      value="housing"
+                      className="gap-2 rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent data-[state=active]:shadow-none"
+                    >
+                      <Home className="h-4 w-4" />
+                      住宅LCC
+                    </TabsTrigger>
+                    <TabsTrigger
+                      value="events"
+                      className="gap-2 rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent data-[state=active]:shadow-none"
+                    >
+                      <Calendar className="h-4 w-4" />
+                      イベント
+                    </TabsTrigger>
+                    <TabsTrigger
+                      value="versions"
+                      className="gap-2 rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent data-[state=active]:shadow-none"
+                    >
+                      <History className="h-4 w-4" />
+                      見直し（改定）
+                    </TabsTrigger>
+                  </TabsList>
+                </Tabs>
+              </div>
+
+              {/* Mobile Dropdown */}
+              <div className="py-3 sm:hidden">
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <Button
+                      variant="outline"
+                      className="w-full justify-between bg-transparent"
+                    >
+                      <span className="flex items-center gap-2">
+                        <Home className="h-4 w-4" />
+                        住宅LCC
+                      </span>
+                      <Menu className="h-4 w-4" />
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent className="w-56">
+                    <DropdownMenuItem onSelect={() => handleTabChange("dashboard")}>
+                      <Home className="mr-2 h-4 w-4" />
+                      ダッシュボード
+                    </DropdownMenuItem>
+                    <DropdownMenuItem onSelect={() => handleTabChange("monthly")}>
+                      <Calendar className="mr-2 h-4 w-4" />
+                      月次
+                    </DropdownMenuItem>
+                    <DropdownMenuItem onSelect={() => handleTabChange("housing")}>
+                      <Home className="mr-2 h-4 w-4" />
+                      住宅LCC
+                    </DropdownMenuItem>
+                    <DropdownMenuItem onSelect={() => handleTabChange("events")}>
+                      <Calendar className="mr-2 h-4 w-4" />
+                      イベント
+                    </DropdownMenuItem>
+                    <DropdownMenuItem onSelect={() => handleTabChange("versions")}>
+                      <History className="mr-2 h-4 w-4" />
+                      見直し（改定）
+                    </DropdownMenuItem>
+                  </DropdownMenuContent>
+                </DropdownMenu>
+              </div>
+            </div>
           </div>
 
           {/* Empty State */}
@@ -419,6 +531,94 @@ export default function HousingLCCPage() {
                 前提を調整
               </Link>
             </Button>
+          </div>
+        </div>
+
+        {/* Navigation Tabs */}
+        <div className="border-b bg-card mb-6">
+          <div className="px-4 sm:px-6">
+            {/* Desktop Tabs */}
+            <div className="hidden sm:block">
+              <Tabs value={tabValue} onValueChange={handleTabChange}>
+                <TabsList className="h-auto w-full justify-start rounded-none border-0 bg-transparent p-0">
+                  <TabsTrigger
+                    value="dashboard"
+                    className="gap-2 rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent data-[state=active]:shadow-none"
+                  >
+                    <Home className="h-4 w-4" />
+                    ダッシュボード
+                  </TabsTrigger>
+                  <TabsTrigger
+                    value="monthly"
+                    className="gap-2 rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent data-[state=active]:shadow-none"
+                  >
+                    <Calendar className="h-4 w-4" />
+                    月次
+                  </TabsTrigger>
+                  <TabsTrigger
+                    value="housing"
+                    className="gap-2 rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent data-[state=active]:shadow-none"
+                  >
+                    <Home className="h-4 w-4" />
+                    住宅LCC
+                  </TabsTrigger>
+                  <TabsTrigger
+                    value="events"
+                    className="gap-2 rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent data-[state=active]:shadow-none"
+                  >
+                    <Calendar className="h-4 w-4" />
+                    イベント
+                  </TabsTrigger>
+                  <TabsTrigger
+                    value="versions"
+                    className="gap-2 rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent data-[state=active]:shadow-none"
+                  >
+                    <History className="h-4 w-4" />
+                    見直し（改定）
+                  </TabsTrigger>
+                </TabsList>
+              </Tabs>
+            </div>
+
+            {/* Mobile Dropdown */}
+            <div className="py-3 sm:hidden">
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button
+                    variant="outline"
+                    className="w-full justify-between bg-transparent"
+                  >
+                    <span className="flex items-center gap-2">
+                      <Home className="h-4 w-4" />
+                      住宅LCC
+                    </span>
+                    <Menu className="h-4 w-4" />
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent className="w-56">
+                  <DropdownMenuItem onSelect={() => handleTabChange("dashboard")}>
+                    <Home className="mr-2 h-4 w-4" />
+                    ダッシュボード
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onSelect={() => handleTabChange("monthly")}>
+                    <Calendar className="mr-2 h-4 w-4" />
+                    月次
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onSelect={() => handleTabChange("housing")}>
+                    <Home className="mr-2 h-4 w-4" />
+                    住宅LCC
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onSelect={() => handleTabChange("events")}>
+                    <Calendar className="mr-2 h-4 w-4" />
+                    イベント
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onSelect={() => handleTabChange("versions")}>
+                    <History className="mr-2 h-4 w-4" />
+                    見直し（改定）
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
+            </div>
           </div>
         </div>
 

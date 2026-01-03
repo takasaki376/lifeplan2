@@ -15,9 +15,14 @@ const versionGetCurrentMock = vi.fn();
 const monthlyGetByYmMock = vi.fn();
 const housingListByVersionMock = vi.fn();
 const eventListByVersionMock = vi.fn();
+const pushMock = vi.fn();
+const routerMock = {
+  push: pushMock,
+};
 
 vi.mock("next/navigation", () => ({
   useParams: () => ({ planId: "plan-123" }),
+  useRouter: () => routerMock,
 }));
 
 vi.mock("next/link", () => ({
@@ -166,6 +171,7 @@ describe("PlanDashboardPage", () => {
     monthlyGetByYmMock.mockReset();
     housingListByVersionMock.mockReset();
     eventListByVersionMock.mockReset();
+    pushMock.mockReset();
 
     planGetMock.mockResolvedValue(makePlan({ id: "plan-123", name: "Plan A" }));
     versionGetCurrentMock.mockResolvedValue(
