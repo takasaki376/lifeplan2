@@ -25,6 +25,10 @@ import {
 import { Textarea } from "@/components/ui/textarea";
 import { Separator } from "@/components/ui/separator";
 import { Badge } from "@/components/ui/badge";
+import {
+  isValidYearMonth,
+  validateLifeEventDraft,
+} from "@/lib/validation/lifeEvent";
 
 export default function EventCreatePage({
   params,
@@ -39,24 +43,35 @@ export default function EventCreatePage({
   const [eventType, setEventType] = useState<string>("");
   const [memo, setMemo] = useState("");
   const [startMonth, setStartMonth] = useState("");
-  const [endMonth, setEndMonth] = useState("");
   const [direction, setDirection] = useState<"expense" | "income">("expense");
-  const [cadence, setCadence] = useState<"onetime" | "monthly">("onetime");
+  const [cadence, setCadence] = useState<"once" | "monthly">("once");
   const [amountYen, setAmountYen] = useState("");
-  const [durationMode, setDurationMode] = useState<"unlimited" | "limited">(
-    "unlimited"
-  );
   const [durationMonths, setDurationMonths] = useState("");
+  const [showErrors, setShowErrors] = useState(false);
 
   // Validation
-  const isValid = useMemo(() => {
-    return (
-      title.trim() !== "" &&
-      startMonth !== "" &&
-      amountYen !== "" &&
-      Number.parseFloat(amountYen) > 0
-    );
-  }, [title, startMonth, amountYen]);
+  const validation = useMemo(
+    () =>
+      validateLifeEventDraft({
+        title,
+        startYm: startMonth,
+        amountYen,
+        direction,
+        cadence,
+        durationMonths,
+      }),
+    [title, startMonth, amountYen, direction, cadence, durationMonths]
+  );
+  const isValid = validation.valid;
+  const fieldErrors = showErrors ? validation.errors : {};
+
+  const durationMonthsValue = useMemo(() => {
+    if (cadence === "once") return 1;
+    if (!durationMonths.trim()) return undefined;
+    const parsed = Number(durationMonths);
+    if (!Number.isFinite(parsed) || !Number.isInteger(parsed)) return undefined;
+    return parsed;
+  }, [cadence, durationMonths]);
 
   // Handle sample data
   const fillSample = () => {
@@ -64,7 +79,6 @@ export default function EventCreatePage({
     setEventType("教育");
     setStartMonth("2026-04");
     setCadence("monthly");
-    setDurationMode("limited");
     setDurationMonths("24");
     setAmountYen("40000");
     setDirection("expense");
@@ -73,7 +87,10 @@ export default function EventCreatePage({
 
   // Handle save
   const handleSave = () => {
-    if (!isValid) return;
+    if (!isValid) {
+      setShowErrors(true);
+      return;
+    }
 
     toast.success("イベントを保存しました");
     router.push(`/plans/${planId}/events`);
@@ -85,17 +102,15 @@ export default function EventCreatePage({
 
   // Preview calculations
   const previewData = useMemo(() => {
-    const amount = Number.parseFloat(amountYen) || 0;
+    const amount = Number.isFinite(Number(amountYen)) ? Number(amountYen) : 0;
     let totalAmount = amount;
     let durationText = "";
 
     if (cadence === "monthly") {
-      if (durationMode === "limited" && durationMonths) {
-        const months = Number.parseInt(durationMonths);
+      const months = durationMonthsValue ?? 0;
+      if (months > 0) {
         totalAmount = amount * months;
-        durationText = `${months}ヶ月間`;
-      } else {
-        durationText = "期間なし";
+        durationText = `${months}ヶ月`;
       }
     }
 
@@ -104,14 +119,33 @@ export default function EventCreatePage({
       totalAmount,
       durationText,
     };
-  }, [amountYen, cadence, durationMode, durationMonths]);
+  }, [amountYen, cadence, durationMonthsValue]);
 
   // Format month for display
   const formatMonth = (monthStr: string) => {
-    if (!monthStr) return "";
+    if (!monthStr || !isValidYearMonth(monthStr)) return "";
     const [year, month] = monthStr.split("-");
     return `${year}年${month}月`;
   };
+
+  const addMonthsToYearMonth = (ym: string, addMonths: number) => {
+    if (!isValidYearMonth(ym)) return "";
+    const [year, month] = ym.split("-").map(Number);
+    const total = year * 12 + (month - 1) + addMonths;
+    const nextYear = Math.floor(total / 12);
+    const nextMonth = (total % 12) + 1;
+    return `${nextYear}-${String(nextMonth).padStart(2, "0")}`;
+  };
+
+  const endMonthDisplay = useMemo(() => {
+    if (cadence !== "monthly") return "";
+    if (!startMonth || !durationMonthsValue || durationMonthsValue < 1) {
+      return "";
+    }
+    return addMonthsToYearMonth(startMonth, durationMonthsValue - 1);
+  }, [cadence, startMonth, durationMonthsValue]);
+
+  const saveDisabled = showErrors ? !isValid : false;
 
   return (
     <div className="min-h-screen bg-muted/30">
@@ -152,7 +186,7 @@ export default function EventCreatePage({
                 <ArrowLeft className="mr-2 h-4 w-4" />
                 キャンセル
               </Button>
-              <Button size="sm" onClick={handleSave} disabled={!isValid}>
+              <Button size="sm" onClick={handleSave} disabled={saveDisabled}>
                 <Save className="mr-2 h-4 w-4" />
                 保存
               </Button>
@@ -181,7 +215,13 @@ export default function EventCreatePage({
                     value={title}
                     onChange={(e) => setTitle(e.target.value)}
                     placeholder="例：保育料 / 入学準備 / 転職による収入増"
+                    className={fieldErrors.title ? "border-destructive" : ""}
                   />
+                  {fieldErrors.title && (
+                    <p className="text-xs text-destructive">
+                      {fieldErrors.title}
+                    </p>
+                  )}
                 </div>
 
                 <div className="space-y-2">
@@ -230,24 +270,32 @@ export default function EventCreatePage({
                     type="month"
                     value={startMonth}
                     onChange={(e) => setStartMonth(e.target.value)}
+                    className={
+                      fieldErrors.startYm ? "border-destructive" : ""
+                    }
                   />
                   <p className="text-xs text-muted-foreground">
                     月単位で管理します（例：2026年4月）
                   </p>
+                  {fieldErrors.startYm && (
+                    <p className="text-xs text-destructive">
+                      {fieldErrors.startYm}
+                    </p>
+                  )}
                 </div>
 
                 {cadence === "monthly" && (
                   <div className="space-y-2">
-                    <Label htmlFor="endMonth">終了月（任意）</Label>
+                    <Label htmlFor="endMonth">終了月</Label>
                     <Input
                       id="endMonth"
                       type="month"
-                      value={endMonth}
-                      onChange={(e) => setEndMonth(e.target.value)}
-                      min={startMonth}
+                      value={endMonthDisplay}
+                      readOnly
+                      disabled
                     />
                     <p className="text-xs text-muted-foreground">
-                      設定すると期間が自動計算されます
+                      開始月と期間から自動計算されます
                     </p>
                   </div>
                 )}
@@ -302,6 +350,11 @@ export default function EventCreatePage({
                       <span className="font-medium">収入</span>
                     </button>
                   </div>
+                  {fieldErrors.direction && (
+                    <p className="text-xs text-destructive">
+                      {fieldErrors.direction}
+                    </p>
+                  )}
                 </div>
 
                 <Separator />
@@ -313,9 +366,9 @@ export default function EventCreatePage({
                   <div className="grid grid-cols-2 gap-3">
                     <button
                       type="button"
-                      onClick={() => setCadence("onetime")}
+                      onClick={() => setCadence("once")}
                       className={`rounded-lg border-2 p-4 text-center transition-all ${
-                        cadence === "onetime"
+                        cadence === "once"
                           ? "border-primary bg-primary/5 font-medium"
                           : "border-border hover:border-muted-foreground/50"
                       }`}
@@ -334,6 +387,11 @@ export default function EventCreatePage({
                       毎月
                     </button>
                   </div>
+                  {fieldErrors.cadence && (
+                    <p className="text-xs text-destructive">
+                      {fieldErrors.cadence}
+                    </p>
+                  )}
                 </div>
 
                 <Separator />
@@ -348,69 +406,55 @@ export default function EventCreatePage({
                       type="number"
                       value={amountYen}
                       onChange={(e) => setAmountYen(e.target.value)}
-                      className="pr-16 text-right"
                       placeholder="0"
-                      min="0"
+                      min="1"
+                      step="1"
+                      className={
+                        fieldErrors.amountYen
+                          ? "pr-16 text-right border-destructive"
+                          : "pr-16 text-right"
+                      }
                     />
                     <span className="absolute right-3 top-1/2 -translate-y-1/2 text-sm text-muted-foreground">
                       {cadence === "monthly" ? "円 / 月" : "円"}
                     </span>
                   </div>
+                  {fieldErrors.amountYen && (
+                    <p className="text-xs text-destructive">
+                      {fieldErrors.amountYen}
+                    </p>
+                  )}
                 </div>
 
                 {cadence === "monthly" && (
                   <div className="space-y-3">
-                    <Label>期間</Label>
-                    <div className="space-y-3">
-                      <button
-                        type="button"
-                        onClick={() => setDurationMode("unlimited")}
-                        className={`w-full rounded-lg border-2 p-3 text-left transition-all ${
-                          durationMode === "unlimited"
-                            ? "border-primary bg-primary/5"
-                            : "border-border hover:border-muted-foreground/50"
-                        }`}
-                      >
-                        <div className="font-medium">期間なし（ずっと）</div>
-                        <div className="text-xs text-muted-foreground">
-                          将来にわたって継続
-                        </div>
-                      </button>
-
-                      <button
-                        type="button"
-                        onClick={() => setDurationMode("limited")}
-                        className={`w-full rounded-lg border-2 p-3 text-left transition-all ${
-                          durationMode === "limited"
-                            ? "border-primary bg-primary/5"
-                            : "border-border hover:border-muted-foreground/50"
-                        }`}
-                      >
-                        <div className="font-medium">期間を指定</div>
-                      </button>
-
-                      {durationMode === "limited" && (
-                        <div className="ml-4 space-y-2">
-                          <Label htmlFor="durationMonths">期間（月数）</Label>
-                          <div className="relative">
-                            <Input
-                              id="durationMonths"
-                              type="number"
-                              value={durationMonths}
-                              onChange={(e) =>
-                                setDurationMonths(e.target.value)
-                              }
-                              className="pr-12"
-                              placeholder="0"
-                              min="1"
-                            />
-                            <span className="absolute right-3 top-1/2 -translate-y-1/2 text-sm text-muted-foreground">
-                              ヶ月
-                            </span>
-                          </div>
-                        </div>
-                      )}
+                    <Label htmlFor="durationMonths">
+                      期間（月数） <span className="text-destructive">*</span>
+                    </Label>
+                    <div className="relative">
+                      <Input
+                        id="durationMonths"
+                        type="number"
+                        value={durationMonths}
+                        onChange={(e) => setDurationMonths(e.target.value)}
+                        className={
+                          fieldErrors.durationMonths
+                            ? "pr-12 border-destructive"
+                            : "pr-12"
+                        }
+                        placeholder="1"
+                        min="1"
+                        step="1"
+                      />
+                      <span className="absolute right-3 top-1/2 -translate-y-1/2 text-sm text-muted-foreground">
+                        ヶ月
+                      </span>
                     </div>
+                    {fieldErrors.durationMonths && (
+                      <p className="text-xs text-destructive">
+                        {fieldErrors.durationMonths}
+                      </p>
+                    )}
                   </div>
                 )}
               </CardContent>
@@ -474,7 +518,7 @@ export default function EventCreatePage({
                   <div className="flex justify-between">
                     <span className="text-muted-foreground">形態</span>
                     <span className="font-medium">
-                      {cadence === "onetime" ? "単発" : "毎月"}
+                      {cadence === "once" ? "単発" : "毎月"}
                     </span>
                   </div>
 
@@ -492,7 +536,7 @@ export default function EventCreatePage({
                       <span className="text-muted-foreground">金額</span>
                       <span className="font-medium">
                         {new Intl.NumberFormat("ja-JP").format(
-                          Number.parseFloat(amountYen)
+                          previewData.amount
                         )}
                         円{cadence === "monthly" && "/月"}
                       </span>
@@ -503,7 +547,7 @@ export default function EventCreatePage({
                     <div className="flex justify-between">
                       <span className="text-muted-foreground">期間</span>
                       <span className="font-medium">
-                        {previewData.durationText}
+                        {previewData.durationText || "未設定"}
                       </span>
                     </div>
                   )}
@@ -517,7 +561,7 @@ export default function EventCreatePage({
                       反映イメージ
                     </div>
                     <div className="text-sm">
-                      {cadence === "onetime" ? (
+                      {cadence === "once" ? (
                         <p>
                           <span className="font-medium">
                             {formatMonth(startMonth)}
@@ -544,7 +588,7 @@ export default function EventCreatePage({
                             {formatMonth(startMonth)}
                           </span>
                           から
-                          {durationMode === "limited" && durationMonths && (
+                          {durationMonthsValue && durationMonths && (
                             <>
                               <span className="mx-1 font-medium">
                                 {previewData.durationText}
@@ -571,10 +615,7 @@ export default function EventCreatePage({
                   </div>
                 )}
 
-                {cadence === "monthly" &&
-                  durationMode === "limited" &&
-                  durationMonths &&
-                  amountYen && (
+                {cadence === "monthly" && durationMonthsValue && amountYen && (
                     <div className="space-y-1">
                       <div className="text-xs text-muted-foreground">
                         総額（概算）
@@ -643,7 +684,11 @@ export default function EventCreatePage({
           >
             下書き保存
           </Button>
-          <Button className="flex-1" onClick={handleSave} disabled={!isValid}>
+          <Button
+            className="flex-1"
+            onClick={handleSave}
+            disabled={saveDisabled}
+          >
             <Save className="mr-2 h-4 w-4" />
             保存
           </Button>
