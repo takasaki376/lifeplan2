@@ -25,6 +25,9 @@ export interface PlanVersion {
   versionNo: number;
   title?: string;
   changeNote?: string;
+  incomeMonthlyYen?: MoneyYen;
+  assetsBalanceYen?: MoneyYen;
+  liabilitiesBalanceYen?: MoneyYen;
   isCurrent: boolean;
   createdAt: ISODate;
 }

@@ -65,7 +65,14 @@ export type PlanCreateInput = Pick<Plan, "name"> &
 export type PlanUpdateInput = Pick<Plan, "id"> &
   Partial<Pick<Plan, "name" | "householdType" | "note">>;
 
-export type VersionCreateInput = Pick<PlanVersion, "title" | "changeNote">;
+export type VersionCreateInput = Pick<
+  PlanVersion,
+  | "title"
+  | "changeNote"
+  | "incomeMonthlyYen"
+  | "assetsBalanceYen"
+  | "liabilitiesBalanceYen"
+>;
 
 export type MonthlyListParams = {
   year?: number;
