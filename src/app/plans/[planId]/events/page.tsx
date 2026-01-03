@@ -1,7 +1,7 @@
-"use client";
+﻿"use client";
 
-import { useState } from "react";
-import { useParams, useRouter } from "next/navigation";
+import { useEffect, useMemo, useState } from "react";
+import { useParams } from "next/navigation";
 import Link from "next/link";
 import {
   Calendar,
@@ -19,6 +19,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import {
   Select,
   SelectContent,
@@ -32,22 +33,14 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Separator } from "@/components/ui/separator";
 import { toast } from "sonner";
+import type { LifeEvent, Plan } from "@/lib/domain/types";
+import { formatYearMonth, formatYen, getCurrentYearMonth } from "@/lib/format";
+import { createRepositories } from "@/lib/repo/factory";
 
-// Mock data types
-type EventDirection = "expense" | "income";
-type EventCadence = "once" | "monthly";
-type EventType =
+type EventTypeKey =
   | "birth"
   | "education"
   | "job_change"
@@ -56,130 +49,114 @@ type EventType =
   | "housing"
   | "other";
 
-interface LifeEvent {
-  id: string;
-  title: string;
-  eventType: EventType;
-  startMonth: string; // YYYY-MM
-  cadence: EventCadence;
-  durationMonths?: number; // for monthly events
-  amountYen: number;
-  direction: EventDirection;
-  note?: string;
-}
-
-// Mock plan
-const MOCK_PLAN = {
-  id: "plan-1",
-  name: "山田家 2026",
-};
-
-// Initial mock events
-const INITIAL_MOCK_EVENTS: LifeEvent[] = [
-  {
-    id: "evt-1",
-    title: "保育料",
-    eventType: "education",
-    startMonth: "2026-04",
-    cadence: "monthly",
-    durationMonths: 24,
-    amountYen: 40000,
-    direction: "expense",
-    note: "認可保育園",
-  },
-  {
-    id: "evt-2",
-    title: "入学金",
-    eventType: "education",
-    startMonth: "2027-03",
-    cadence: "once",
-    amountYen: 200000,
-    direction: "expense",
-  },
-  {
-    id: "evt-3",
-    title: "転職に伴う収入増",
-    eventType: "job_change",
-    startMonth: "2030-04",
-    cadence: "once",
-    amountYen: 600000,
-    direction: "income",
-    note: "基本給アップ分",
-  },
-  {
-    id: "evt-4",
-    title: "引越し費用",
-    eventType: "housing",
-    startMonth: "2025-04",
-    cadence: "once",
-    amountYen: 300000,
-    direction: "expense",
-  },
-];
-
-// Event type labels
-const EVENT_TYPE_LABELS: Record<EventType, string> = {
+const EVENT_TYPE_LABELS: Record<EventTypeKey, string> = {
   birth: "出産",
   education: "教育",
   job_change: "転職",
   retirement: "退職",
   care: "介護",
-  housing: "住居",
+  housing: "住宅",
   other: "その他",
 };
 
-// Cadence labels
-const CADENCE_LABELS: Record<EventCadence, string> = {
+const EVENT_TYPE_OPTIONS: EventTypeKey[] = [
+  "birth",
+  "education",
+  "job_change",
+  "retirement",
+  "care",
+  "housing",
+  "other",
+];
+
+const CADENCE_LABELS: Record<LifeEvent["cadence"], string> = {
   once: "単発",
   monthly: "毎月",
 };
 
 type TimeFilter = "upcoming" | "past" | "all";
-type typeFilter = EventType | "all";
-type cadenceFilter = EventCadence | "all";
+type TypeFilter = EventTypeKey | "all";
+type CadenceFilter = LifeEvent["cadence"] | "all";
 
 export default function EventsPage() {
   const params = useParams();
-  const router = useRouter();
   const planId = params.planId as string;
+  const repos = useMemo(() => createRepositories(), []);
+  const currentYm = getCurrentYearMonth();
 
-  const [events, setEvents] = useState<LifeEvent[]>(INITIAL_MOCK_EVENTS);
+  const [plan, setPlan] = useState<Plan | null>(null);
+  const [events, setEvents] = useState<LifeEvent[]>([]);
   const [timeFilter, setTimeFilter] = useState<TimeFilter>("upcoming");
-  const [typeFilter, setTypeFilter] = useState<string>("all");
-  const [cadenceFilter, setCadenceFilter] = useState<string>("all");
+  const [typeFilter, setTypeFilter] = useState<TypeFilter>("all");
+  const [cadenceFilter, setCadenceFilter] = useState<CadenceFilter>("all");
   const [searchQuery, setSearchQuery] = useState("");
-  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
-  const [eventToDelete, setEventToDelete] = useState<string | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [currentVersionMissing, setCurrentVersionMissing] = useState(false);
 
-  const currentMonth = "2026-02"; // Mock current date
+  useEffect(() => {
+    const load = async () => {
+      setLoading(true);
+      setError(null);
+      try {
+        const planData = await repos.plan.get(planId);
+        if (!planData) {
+          setError("プランが見つかりません");
+          return;
+        }
+        setPlan(planData);
+
+        const currentVersion = await repos.version.getCurrent(planId);
+        if (!currentVersion) {
+          setCurrentVersionMissing(true);
+          setEvents([]);
+          return;
+        }
+        setCurrentVersionMissing(false);
+        const list = await repos.event.listByVersion(currentVersion.id, {
+          scope: "all",
+        });
+        setEvents(list);
+      } catch (loadError) {
+        console.error(loadError);
+        setError("イベントの取得に失敗しました");
+        toast.error("イベントの取得に失敗しました");
+      } finally {
+        setLoading(false);
+      }
+    };
+    void load();
+  }, [planId, repos]);
 
   // Filter events
-  const filteredEvents = events.filter((event) => {
-    // Time filter
-    if (timeFilter === "upcoming" && event.startMonth <= currentMonth)
-      return false;
-    if (timeFilter === "past" && event.startMonth > currentMonth) return false;
+  const filteredEvents = events
+    .filter((event) => {
+      // Time filter
+      if (timeFilter === "upcoming" && event.startYm < currentYm) return false;
+      if (timeFilter === "past" && event.startYm >= currentYm) return false;
 
-    // Type filter
-    if (typeFilter !== "all" && event.eventType !== typeFilter) return false;
+      // Type filter
+      if (typeFilter !== "all" && event.eventType !== typeFilter) return false;
 
-    // Cadence filter
-    if (cadenceFilter !== "all" && event.cadence !== cadenceFilter)
-      return false;
+      // Cadence filter
+      if (cadenceFilter !== "all" && event.cadence !== cadenceFilter)
+        return false;
 
-    // Search query
-    if (
-      searchQuery &&
-      !event.title.toLowerCase().includes(searchQuery.toLowerCase())
-    )
-      return false;
+      // Search query
+      if (searchQuery) {
+        const title = event.title ?? "";
+        if (!title.toLowerCase().includes(searchQuery.toLowerCase())) {
+          return false;
+        }
+      }
 
-    return true;
-  });
+      return true;
+    })
+    .sort((a, b) => a.startYm.localeCompare(b.startYm));
 
   // Group events by year and month
   const groupedEvents = filteredEvents.reduce((acc, event) => {
-    const [year, month] = event.startMonth.split("-");
+    const [year, month] = event.startYm.split("-");
     if (!acc[year]) acc[year] = {};
     if (!acc[year][month]) acc[year][month] = [];
     acc[year][month].push(event);
@@ -199,16 +176,14 @@ export default function EventsPage() {
   }));
 
   // Calculate counts
-  const upcomingCount = events.filter(
-    (e) => e.startMonth > currentMonth
-  ).length;
-  const pastCount = events.filter((e) => e.startMonth <= currentMonth).length;
+  const upcomingCount = events.filter((e) => e.startYm >= currentYm).length;
+  const pastCount = events.filter((e) => e.startYm < currentYm).length;
 
   // Calculate next 12 months impact
   const next12MonthsImpact = events
     .filter((e) => {
-      const eventDate = new Date(e.startMonth + "-01");
-      const currentDate = new Date(currentMonth + "-01");
+      const eventDate = new Date(e.startYm + "-01");
+      const currentDate = new Date(currentYm + "-01");
       const twelveMonthsLater = new Date(currentDate);
       twelveMonthsLater.setMonth(currentDate.getMonth() + 12);
       return eventDate > currentDate && eventDate <= twelveMonthsLater;
@@ -225,58 +200,8 @@ export default function EventsPage() {
 
   // Next event
   const nextEvent = events
-    .filter((e) => e.startMonth > currentMonth)
-    .sort((a, b) => a.startMonth.localeCompare(b.startMonth))[0];
-
-  const handleAddSampleEvents = () => {
-    const sampleEvents: LifeEvent[] = [
-      {
-        id: `evt-${Date.now()}-1`,
-        title: "学習塾",
-        eventType: "education",
-        startMonth: "2026-09",
-        cadence: "monthly",
-        durationMonths: 36,
-        amountYen: 25000,
-        direction: "expense",
-      },
-      {
-        id: `evt-${Date.now()}-2`,
-        title: "車両購入",
-        eventType: "other",
-        startMonth: "2028-06",
-        cadence: "once",
-        amountYen: 2500000,
-        direction: "expense",
-      },
-    ];
-    setEvents([...events, ...sampleEvents]);
-    toast.success("サンプルイベントを追加しました");
-  };
-
-  const handleDuplicate = (event: LifeEvent) => {
-    const duplicated: LifeEvent = {
-      ...event,
-      id: `evt-${event.id}`,
-      title: `${event.title}（コピー）`,
-    };
-    setEvents([...events, duplicated]);
-    toast.success("イベントを複製しました");
-  };
-
-  const handleDeleteClick = (eventId: string) => {
-    setEventToDelete(eventId);
-    setDeleteDialogOpen(true);
-  };
-
-  const handleDeleteConfirm = () => {
-    if (eventToDelete) {
-      setEvents(events.filter((e) => e.id !== eventToDelete));
-      toast.success("イベントを削除しました");
-    }
-    setDeleteDialogOpen(false);
-    setEventToDelete(null);
-  };
+    .filter((e) => e.startYm >= currentYm)
+    .sort((a, b) => a.startYm.localeCompare(b.startYm))[0];
 
   const handleResetFilters = () => {
     setTimeFilter("upcoming");
@@ -285,17 +210,19 @@ export default function EventsPage() {
     setSearchQuery("");
   };
 
-  const formatYen = (amount: number) => {
-    return new Intl.NumberFormat("ja-JP", {
-      style: "currency",
-      currency: "JPY",
-      minimumFractionDigits: 0,
-    }).format(amount);
+  const formatEventMonth = (ym: string) => {
+    const formatted = formatYearMonth(ym, { showDashForEmpty: false });
+    return formatted || ym;
   };
 
-  const formatMonth = (yyyymm: string) => {
-    const [year, month] = yyyymm.split("-");
-    return `${year}/${month}`;
+  const formatAmount = (amount: number) =>
+    formatYen(amount, { showDashForEmpty: false, sign: "never" });
+
+  const getEventTitle = (event: LifeEvent) => {
+    if (event.title && event.title.trim().length > 0) {
+      return event.title;
+    }
+    return EVENT_TYPE_LABELS[event.eventType as EventTypeKey] ?? event.eventType;
   };
 
   return (
@@ -310,7 +237,7 @@ export default function EventsPage() {
             </Link>
             <ChevronRight className="h-4 w-4" />
             <Link href={`/plans/${planId}`} className="hover:text-foreground">
-              {MOCK_PLAN.name}
+              {plan?.name ?? "プラン"}
             </Link>
             <ChevronRight className="h-4 w-4" />
             <span className="text-foreground">イベント</span>
@@ -345,7 +272,34 @@ export default function EventsPage() {
 
       {/* Main Content */}
       <main className="container mx-auto max-w-7xl px-4 py-8 sm:px-6">
-        <div className="grid gap-6 lg:grid-cols-[1fr_300px]">
+        {error ? (
+          <Alert variant="destructive">
+            <AlertTitle>読み込みに失敗しました</AlertTitle>
+            <AlertDescription>{error}</AlertDescription>
+          </Alert>
+        ) : loading ? (
+          <Card className="p-8 text-center text-sm text-muted-foreground">
+            読み込み中...
+          </Card>
+        ) : currentVersionMissing ? (
+          <Card>
+            <CardContent className="flex flex-col items-center justify-center py-16 text-center">
+              <Calendar className="h-12 w-12 text-muted-foreground mb-4" />
+              <h3 className="text-lg font-semibold mb-2">
+                現行バージョンがありません
+              </h3>
+              <p className="text-sm text-muted-foreground mb-6 max-w-md">
+                まずは改定を作成して、イベントを登録できる状態にしてください。
+              </p>
+              <Button asChild>
+                <Link href={`/plans/${planId}/versions/new`}>
+                  改定を作成
+                </Link>
+              </Button>
+            </CardContent>
+          </Card>
+        ) : (
+          <div className="grid gap-6 lg:grid-cols-[1fr_300px]">
           {/* Left: Main content */}
           <div className="space-y-6">
             {/* Filter Bar */}
@@ -366,26 +320,31 @@ export default function EventsPage() {
                     </Tabs>
 
                     {/* Type Filter */}
-                    <Select value={typeFilter} onValueChange={setTypeFilter}>
+                    <Select
+                      value={typeFilter}
+                      onValueChange={(value) =>
+                        setTypeFilter(value as TypeFilter)
+                      }
+                    >
                       <SelectTrigger className="w-[140px]">
                         <SelectValue placeholder="種別" />
                       </SelectTrigger>
                       <SelectContent>
                         <SelectItem value="all">すべて</SelectItem>
-                        <SelectItem value="birth">出産</SelectItem>
-                        <SelectItem value="education">教育</SelectItem>
-                        <SelectItem value="job_change">転職</SelectItem>
-                        <SelectItem value="retirement">退職</SelectItem>
-                        <SelectItem value="care">介護</SelectItem>
-                        <SelectItem value="housing">住居</SelectItem>
-                        <SelectItem value="other">その他</SelectItem>
+                        {EVENT_TYPE_OPTIONS.map((type) => (
+                          <SelectItem key={type} value={type}>
+                            {EVENT_TYPE_LABELS[type]}
+                          </SelectItem>
+                        ))}
                       </SelectContent>
                     </Select>
 
                     {/* Cadence Filter */}
                     <Select
                       value={cadenceFilter}
-                      onValueChange={setCadenceFilter}
+                      onValueChange={(value) =>
+                        setCadenceFilter(value as CadenceFilter)
+                      }
                     >
                       <SelectTrigger className="w-[120px]">
                         <SelectValue placeholder="形態" />
@@ -437,11 +396,7 @@ export default function EventsPage() {
                         <Plus className="mr-2 h-4 w-4" />
                         イベントを追加
                       </Link>
-                    </Button>
-                    <Button variant="outline" onClick={handleAddSampleEvents}>
-                      例を追加（サンプル）
-                    </Button>
-                  </div>
+                    </Button></div>
                 </CardContent>
               </Card>
             ) : filteredEvents.length === 0 ? (
@@ -476,8 +431,9 @@ export default function EventsPage() {
                         </h3>
                         <div className="space-y-2">
                           {monthEvents.map((event) => {
-                            const isPast = event.startMonth <= currentMonth;
-                            const isCurrent = event.startMonth === currentMonth;
+                            const isPast = event.startYm < currentYm;
+                            const isCurrent = event.startYm === currentYm;
+                            const displayTitle = getEventTitle(event);
                             return (
                               <Card
                                 key={event.id}
@@ -493,21 +449,21 @@ export default function EventsPage() {
                                         variant="outline"
                                         className="shrink-0"
                                       >
-                                        {formatMonth(event.startMonth)}
+                                        {formatEventMonth(event.startYm)}
                                       </Badge>
 
                                       {/* Middle: Title and details */}
                                       <div className="flex-1 min-w-0">
                                         <div className="flex items-center gap-2 mb-2">
                                           <h4 className="font-semibold text-foreground">
-                                            {event.title}
+                                            {displayTitle}
                                           </h4>
                                           {isPast && (
                                             <Badge
                                               variant="secondary"
                                               className="text-xs"
                                             >
-                                              完了
+                                             完了
                                             </Badge>
                                           )}
                                         </div>
@@ -529,7 +485,9 @@ export default function EventsPage() {
                                               : "支出"}
                                           </Badge>
                                           <Badge variant="outline">
-                                            {EVENT_TYPE_LABELS[event.eventType]}
+                                            {EVENT_TYPE_LABELS[
+                                              event.eventType as EventTypeKey
+                                            ] ?? event.eventType}
                                           </Badge>
                                           <Badge variant="outline">
                                             {CADENCE_LABELS[event.cadence]}
@@ -565,7 +523,7 @@ export default function EventsPage() {
                                                 : "text-foreground"
                                             }`}
                                           >
-                                            {formatYen(event.amountYen)}
+                                            {formatAmount(event.amountYen)}
                                           </span>
                                         </div>
                                         {event.cadence === "monthly" && (
@@ -610,18 +568,14 @@ export default function EventsPage() {
                                               </Link>
                                             </DropdownMenuItem>
                                             <DropdownMenuItem
-                                              onClick={() =>
-                                                handleDuplicate(event)
-                                              }
+                                              disabled
                                             >
                                               <Copy className="mr-2 h-4 w-4" />
                                               複製
                                             </DropdownMenuItem>
                                             <DropdownMenuItem
                                               className="text-destructive focus:text-destructive"
-                                              onClick={() =>
-                                                handleDeleteClick(event.id)
-                                              }
+                                              disabled
                                             >
                                               <Trash2 className="mr-2 h-4 w-4" />
                                               削除
@@ -659,11 +613,11 @@ export default function EventsPage() {
                     <h4 className="text-sm font-semibold mb-2">次のイベント</h4>
                     <div className="rounded-lg border p-3 space-y-1">
                       <div className="text-sm text-muted-foreground">
-                        {formatMonth(nextEvent.startMonth)}
+                        {formatEventMonth(nextEvent.startYm)}
                       </div>
-                      <div className="font-medium">{nextEvent.title}</div>
+                      <div className="font-medium">{getEventTitle(nextEvent)}</div>
                       <div className="text-sm font-semibold">
-                        {formatYen(nextEvent.amountYen)}
+                        {formatAmount(nextEvent.amountYen)}
                         {nextEvent.cadence === "monthly" && "/月"}
                       </div>
                     </div>
@@ -681,7 +635,7 @@ export default function EventsPage() {
                     今後12ヶ月の追加支出（概算）
                   </h4>
                   <div className="text-2xl font-bold">
-                    {formatYen(next12MonthsImpact)}
+                    {formatAmount(next12MonthsImpact)}
                   </div>
                 </div>
 
@@ -706,28 +660,26 @@ export default function EventsPage() {
             </Card>
           </div>
         </div>
+        )}
       </main>
-
-      {/* Delete Confirmation Dialog */}
-      <Dialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>イベントを削除しますか？</DialogTitle>
-            <DialogDescription>この操作は取り消せません。</DialogDescription>
-          </DialogHeader>
-          <DialogFooter>
-            <Button
-              variant="outline"
-              onClick={() => setDeleteDialogOpen(false)}
-            >
-              キャンセル
-            </Button>
-            <Button variant="destructive" onClick={handleDeleteConfirm}>
-              削除
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
     </div>
   );
 }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
