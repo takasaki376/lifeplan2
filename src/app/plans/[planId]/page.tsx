@@ -477,29 +477,16 @@ export default function PlanDashboardPage() {
                   </div>
                   {hasMonthlyRecord ? (
                     <Badge
-                      variant={isMonthlyComplete ? "default" : "destructive"}
-                      className={
-                        isMonthlyComplete
-                          ? "bg-green-500 hover:bg-green-600"
-                          : ""
-                      }
+                      variant="default"
+                      className="bg-green-500 hover:bg-green-600"
                     >
-                      {isMonthlyComplete ? (
-                        <>
-                          <CheckCircle2 className="mr-1 h-3 w-3" />
-                          入力済み
-                        </>
-                      ) : (
-                        <>
-                          <AlertTriangle className="mr-1 h-3 w-3" />
-                          今月未入力
-                        </>
-                      )}
+                      <CheckCircle2 className="mr-1 h-3 w-3" />
+                      入力済み
                     </Badge>
                   ) : (
                     <Badge variant="destructive">
                       <AlertTriangle className="mr-1 h-3 w-3" />
-                      今月未入力
+                      未入力
                     </Badge>
                   )}
                 </div>
@@ -554,9 +541,7 @@ export default function PlanDashboardPage() {
               <CardFooter className="flex gap-2">
                 <Button asChild className="flex-1 sm:flex-none">
                   <Link href={`/plans/${planId}/months/current`}>
-                    {isMonthlyComplete
-                      ? "今月の内訳を見る"
-                      : "今月を入力する"}
+                    {hasMonthlyRecord ? "今月を編集" : "今月を入力"}
                   </Link>
                 </Button>
                 <Button asChild variant="outline">

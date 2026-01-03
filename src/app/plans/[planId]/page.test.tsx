@@ -225,7 +225,26 @@ describe("PlanDashboardPage", () => {
         screen.getByText("まずは今月の合計を入力しましょう"),
       ).toBeInTheDocument(),
     );
-    expect(screen.getByRole("link", { name: "今月を入力" })).toHaveAttribute(
+    const monthlyLinks = screen.getAllByRole("link", { name: "今月を入力" });
+    expect(
+      monthlyLinks.some(
+        (link) => link.getAttribute("href") === "/plans/plan-123/months/current",
+      ),
+    ).toBe(true);
+  });
+
+  it("shows monthly status as completed when record exists even if not finalized", async () => {
+    monthlyGetByYmMock.mockResolvedValue({
+      ...makeMonthly("plan-123"),
+      isFinalized: false,
+    });
+
+    render(<PlanDashboardPage />);
+
+    await waitFor(() =>
+      expect(screen.getByText("入力済み")).toBeInTheDocument(),
+    );
+    expect(screen.getByRole("link", { name: "今月を編集" })).toHaveAttribute(
       "href",
       "/plans/plan-123/months/current",
     );
