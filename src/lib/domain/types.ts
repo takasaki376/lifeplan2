@@ -81,7 +81,7 @@ export interface LifeEvent {
   planVersionId: Id;
   eventType: string;
   title?: string;
-  startYm: YearMonth;
+  startYm: YearMonth | string;
   cadence: EventCadence;
   durationMonths?: number;
   amountYen: MoneyYen;
@@ -91,7 +91,11 @@ export interface LifeEvent {
   updatedAt: ISODate;
 }
 
-export type HousingType = "high_performance_home" | "detached" | "condo" | "rent";
+export type HousingType =
+  | "high_performance_home"
+  | "detached"
+  | "condo"
+  | "rent";
 export type RepaymentType = "annuity" | "equal_principal";
 
 export interface HousingCommonAssumptions {

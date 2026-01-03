@@ -1,11 +1,14 @@
-"use client";
+﻿"use client";
 
-import { useState, useMemo } from "react";
+import React from "react";
+import { useEffect, useMemo, useState } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import {
   ArrowLeft,
   Save,
+  Loader2,
   ArrowUpRight,
   ArrowDownRight,
   Info,
@@ -25,10 +28,32 @@ import {
 import { Textarea } from "@/components/ui/textarea";
 import { Separator } from "@/components/ui/separator";
 import { Badge } from "@/components/ui/badge";
+import { Alert, AlertDescription } from "@/components/ui/alert";
 import {
   isValidYearMonth,
   validateLifeEventDraft,
 } from "@/lib/validation/lifeEvent";
+import type { PlanVersion, YearMonth } from "@/lib/domain/types";
+import { createRepositories } from "@/lib/repo/factory";
+
+type EventTypeKey =
+  | "birth"
+  | "education"
+  | "job_change"
+  | "retirement"
+  | "care"
+  | "housing"
+  | "other";
+
+const EVENT_TYPE_LABELS: Record<EventTypeKey, string> = {
+  birth: "出産",
+  education: "教育",
+  job_change: "転職",
+  retirement: "退職",
+  care: "介護",
+  housing: "住宅",
+  other: "その他",
+};
 
 export default function EventCreatePage({
   params,
@@ -37,10 +62,19 @@ export default function EventCreatePage({
 }) {
   const router = useRouter();
   const { planId } = use(params);
+  const repos = useMemo(() => createRepositories(), []);
+
+  const [currentVersion, setCurrentVersion] = useState<PlanVersion | null>(
+    null,
+  );
+  const [currentVersionMissing, setCurrentVersionMissing] = useState(false);
+  const [versionLoading, setVersionLoading] = useState(true);
+  const [versionError, setVersionError] = useState<string | null>(null);
+  const [isSaving, setIsSaving] = useState(false);
 
   // Form state
   const [title, setTitle] = useState("");
-  const [eventType, setEventType] = useState<string>("");
+  const [eventType, setEventType] = useState<EventTypeKey | "">("");
   const [memo, setMemo] = useState("");
   const [startMonth, setStartMonth] = useState("");
   const [direction, setDirection] = useState<"expense" | "income">("expense");
@@ -60,7 +94,7 @@ export default function EventCreatePage({
         cadence,
         durationMonths,
       }),
-    [title, startMonth, amountYen, direction, cadence, durationMonths]
+    [title, startMonth, amountYen, direction, cadence, durationMonths],
   );
   const isValid = validation.valid;
   const fieldErrors = showErrors ? validation.errors : {};
@@ -73,10 +107,42 @@ export default function EventCreatePage({
     return parsed;
   }, [cadence, durationMonths]);
 
+  useEffect(() => {
+    let active = true;
+    const load = async () => {
+      setVersionLoading(true);
+      setVersionError(null);
+      try {
+        const version = await repos.version.getCurrent(planId);
+        if (!active) return;
+        if (!version) {
+          setCurrentVersion(null);
+          setCurrentVersionMissing(true);
+          return;
+        }
+        setCurrentVersion(version);
+        setCurrentVersionMissing(false);
+      } catch (error) {
+        console.error(error);
+        if (!active) return;
+        setVersionError("現行バージョンの取得に失敗しました");
+        toast.error("現行バージョンの取得に失敗しました");
+      } finally {
+        if (!active) return;
+        setVersionLoading(false);
+      }
+    };
+
+    void load();
+    return () => {
+      active = false;
+    };
+  }, [planId, repos]);
+
   // Handle sample data
   const fillSample = () => {
     setTitle("保育料");
-    setEventType("教育");
+    setEventType("education");
     setStartMonth("2026-04");
     setCadence("monthly");
     setDurationMonths("24");
@@ -86,14 +152,57 @@ export default function EventCreatePage({
   };
 
   // Handle save
-  const handleSave = () => {
+  const handleSave = async () => {
     if (!isValid) {
       setShowErrors(true);
       return;
     }
 
-    toast.success("イベントを保存しました");
-    router.push(`/plans/${planId}/events`);
+    if (versionLoading) {
+      toast.error("現行バージョンを取得しています");
+      return;
+    }
+
+    if (!currentVersion) {
+      setCurrentVersionMissing(true);
+      toast.error("現行バージョンが見つかりません");
+      return;
+    }
+
+    if (!isValidYearMonth(startMonth)) {
+      setShowErrors(true);
+      return;
+    }
+
+    const amountValue = Number(amountYen);
+    const durationValue = cadence === "once" ? 1 : durationMonthsValue;
+    if (!Number.isFinite(amountValue) || !durationValue) {
+      setShowErrors(true);
+      return;
+    }
+
+    setIsSaving(true);
+    try {
+      const startYm = startMonth as YearMonth;
+      await repos.event.create({
+        planVersionId: currentVersion.id,
+        title: title.trim(),
+        eventType: eventType || "other",
+        startYm,
+        cadence,
+        amountYen: amountValue,
+        direction,
+        durationMonths: durationValue,
+        note: memo.trim() ? memo.trim() : undefined,
+      });
+      toast.success("イベントを保存しました");
+      router.push(`/plans/${planId}/events`);
+    } catch (error) {
+      console.error(error);
+      toast.error("保存に失敗しました");
+    } finally {
+      setIsSaving(false);
+    }
   };
 
   const handleCancel = () => {
@@ -145,7 +254,14 @@ export default function EventCreatePage({
     return addMonthsToYearMonth(startMonth, durationMonthsValue - 1);
   }, [cadence, startMonth, durationMonthsValue]);
 
-  const saveDisabled = showErrors ? !isValid : false;
+  const saveDisabled =
+    isSaving ||
+    versionLoading ||
+    currentVersionMissing ||
+    Boolean(versionError) ||
+    (showErrors && !isValid);
+
+  const eventTypeLabel = eventType ? EVENT_TYPE_LABELS[eventType] : "未設定";
 
   return (
     <div className="min-h-screen bg-muted/30">
@@ -177,18 +293,27 @@ export default function EventCreatePage({
                 イベントを追加
               </h1>
               <p className="mt-1 text-sm text-muted-foreground">
-                将来の支出や収入の変化を登録します。正確でなくてOK。
+                将来の支出や収入の変化を登録します。正確でなくてOKです。
               </p>
             </div>
 
             <div className="flex items-center gap-2">
-              <Button variant="outline" size="sm" onClick={handleCancel}>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={handleCancel}
+                disabled={isSaving}
+              >
                 <ArrowLeft className="mr-2 h-4 w-4" />
                 キャンセル
               </Button>
               <Button size="sm" onClick={handleSave} disabled={saveDisabled}>
-                <Save className="mr-2 h-4 w-4" />
-                保存
+                {isSaving ? (
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                ) : (
+                  <Save className="mr-2 h-4 w-4" />
+                )}
+                {isSaving ? "保存中..." : "保存"}
               </Button>
             </div>
           </div>
@@ -197,6 +322,27 @@ export default function EventCreatePage({
 
       {/* Main Content */}
       <main className="mx-auto max-w-7xl px-4 py-6 sm:px-6">
+        {(versionError || currentVersionMissing) && (
+          <div className="mb-6 space-y-3">
+            {versionError && (
+              <Alert variant="destructive">
+                <AlertDescription>{versionError}</AlertDescription>
+              </Alert>
+            )}
+            {currentVersionMissing && (
+              <Alert>
+                <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                  <AlertDescription>
+                    現行バージョンが見つかりません。改定を作成してください。
+                  </AlertDescription>
+                  <Button asChild size="sm">
+                    <Link href={`/plans/${planId}/versions/new`}>改定を作成</Link>
+                  </Button>
+                </div>
+              </Alert>
+            )}
+          </div>
+        )}
         <div className="grid gap-6 lg:grid-cols-12">
           {/* Left Column: Form */}
           <div className="space-y-6 lg:col-span-8">
@@ -226,18 +372,23 @@ export default function EventCreatePage({
 
                 <div className="space-y-2">
                   <Label htmlFor="eventType">種別（任意）</Label>
-                  <Select value={eventType} onValueChange={setEventType}>
+                  <Select
+                    value={eventType}
+                    onValueChange={(value) =>
+                      setEventType(value as EventTypeKey)
+                    }
+                  >
                     <SelectTrigger id="eventType">
                       <SelectValue placeholder="選択してください" />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="出産">出産</SelectItem>
-                      <SelectItem value="教育">教育</SelectItem>
-                      <SelectItem value="転職">転職</SelectItem>
-                      <SelectItem value="退職">退職</SelectItem>
-                      <SelectItem value="介護">介護</SelectItem>
-                      <SelectItem value="住居">住居</SelectItem>
-                      <SelectItem value="その他">その他</SelectItem>
+                      <SelectItem value="birth">出産</SelectItem>
+                      <SelectItem value="education">教育</SelectItem>
+                      <SelectItem value="job_change">転職</SelectItem>
+                      <SelectItem value="retirement">退職</SelectItem>
+                      <SelectItem value="care">介護</SelectItem>
+                      <SelectItem value="housing">住宅</SelectItem>
+                      <SelectItem value="other">その他</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
@@ -270,12 +421,10 @@ export default function EventCreatePage({
                     type="month"
                     value={startMonth}
                     onChange={(e) => setStartMonth(e.target.value)}
-                    className={
-                      fieldErrors.startYm ? "border-destructive" : ""
-                    }
+                    className={fieldErrors.startYm ? "border-destructive" : ""}
                   />
                   <p className="text-xs text-muted-foreground">
-                    月単位で管理します（例：2026年4月）
+                    月単位で管理します（例: 2026年4月）
                   </p>
                   {fieldErrors.startYm && (
                     <p className="text-xs text-destructive">
@@ -472,7 +621,7 @@ export default function EventCreatePage({
               </CardHeader>
               <CardContent className="space-y-4 text-sm text-muted-foreground">
                 <p>
-                  インフレ反映や詳細な影響設定は、今後のアップデートで対応予定です。
+                  インフレ反映など詳細な影響設定は今後のアップデートで対応予定です。
                 </p>
               </CardContent>
             </Card>
@@ -495,7 +644,7 @@ export default function EventCreatePage({
                 <div className="space-y-3 text-sm">
                   <div className="flex justify-between">
                     <span className="text-muted-foreground">種別</span>
-                    <span className="font-medium">{eventType || "未設定"}</span>
+                    <span className="font-medium">{eventTypeLabel}</span>
                   </div>
 
                   <div className="flex justify-between">
@@ -536,9 +685,9 @@ export default function EventCreatePage({
                       <span className="text-muted-foreground">金額</span>
                       <span className="font-medium">
                         {new Intl.NumberFormat("ja-JP").format(
-                          previewData.amount
+                          previewData.amount,
                         )}
-                        円{cadence === "monthly" && "/月"}
+                        {cadence === "monthly" && " / 月"}
                       </span>
                     </div>
                   )}
@@ -576,11 +725,11 @@ export default function EventCreatePage({
                           >
                             {direction === "expense" ? "▼" : "▲"}
                             {new Intl.NumberFormat("ja-JP").format(
-                              previewData.amount
+                              previewData.amount,
                             )}
                             円
                           </span>
-                          （{direction === "expense" ? "支出" : "収入"}）
+                          {direction === "expense" ? "支出" : "収入"}
                         </p>
                       ) : (
                         <p>
@@ -604,11 +753,11 @@ export default function EventCreatePage({
                           >
                             {direction === "expense" ? "▼" : "▲"}
                             {new Intl.NumberFormat("ja-JP").format(
-                              previewData.amount
+                              previewData.amount,
                             )}
                             円/月
                           </span>
-                          （{direction === "expense" ? "支出" : "収入"}）
+                          {direction === "expense" ? "支出" : "収入"}
                         </p>
                       )}
                     </div>
@@ -616,20 +765,20 @@ export default function EventCreatePage({
                 )}
 
                 {cadence === "monthly" && durationMonthsValue && amountYen && (
-                    <div className="space-y-1">
-                      <div className="text-xs text-muted-foreground">
-                        総額（概算）
-                      </div>
-                      <div className="text-xl font-bold">
-                        {new Intl.NumberFormat("ja-JP").format(
-                          previewData.totalAmount
-                        )}
-                        円
-                      </div>
+                  <div className="space-y-1">
+                    <div className="text-xs text-muted-foreground">
+                      総額（概算）
                     </div>
-                  )}
+                    <div className="text-xl font-bold">
+                      {new Intl.NumberFormat("ja-JP").format(
+                        previewData.totalAmount,
+                      )}
+                      円
+                    </div>
+                  </div>
+                )}
 
-                <div className="rounded-lg bg-blue-50 dark:bg-blue-950/20 p-3 text-xs text-blue-900 dark:text-blue-100">
+                <div className="rounded-lg bg-blue-50 p-3 text-xs text-blue-900">
                   前提はあとから変更できます
                 </div>
               </CardContent>
@@ -646,11 +795,11 @@ export default function EventCreatePage({
               <CardContent className="space-y-2 text-sm text-muted-foreground">
                 <div className="flex gap-2">
                   <span className="text-primary">•</span>
-                  <p>正確でなくてOK。概算から始めましょう</p>
+                  <p>正確でなくてOK。概算から始めましょう。</p>
                 </div>
                 <div className="flex gap-2">
                   <span className="text-primary">•</span>
-                  <p>毎月のものは「毎月」を選ぶのがおすすめ</p>
+                  <p>毎月の支出は「毎月」を選ぶのがおすすめ</p>
                 </div>
                 <div className="flex gap-2">
                   <span className="text-primary">•</span>
@@ -681,16 +830,17 @@ export default function EventCreatePage({
             variant="outline"
             className="flex-1 bg-transparent"
             onClick={() => toast.info("下書きとして保存しました")}
+            disabled={isSaving}
           >
             下書き保存
           </Button>
-          <Button
-            className="flex-1"
-            onClick={handleSave}
-            disabled={saveDisabled}
-          >
-            <Save className="mr-2 h-4 w-4" />
-            保存
+          <Button className="flex-1" onClick={handleSave} disabled={saveDisabled}>
+            {isSaving ? (
+              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+            ) : (
+              <Save className="mr-2 h-4 w-4" />
+            )}
+            {isSaving ? "保存中..." : "保存"}
           </Button>
         </div>
       </div>
@@ -705,5 +855,3 @@ function use<T>(promise: Promise<T>): T {
   }
   throw promise;
 }
-
-import React from "react";
