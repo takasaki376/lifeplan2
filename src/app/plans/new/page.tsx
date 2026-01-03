@@ -1,8 +1,9 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { ArrowLeft, ArrowRight, Check, Home } from "lucide-react";
+import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -24,6 +25,9 @@ import {
 } from "@/components/ui/select";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Separator } from "@/components/ui/separator";
+import type { HouseholdType, HousingType } from "@/lib/domain/types";
+import { createRepositories } from "@/lib/repo/factory";
+import { createPlanWizard } from "@/lib/usecases/createPlanWizard";
 
 interface FormData {
   planName: string;
@@ -39,28 +43,49 @@ const housingOptions = [
   {
     value: "high_performance_home",
     title: "高性能住宅",
-    description: "高耐久・高性能住宅（光熱費・修繕費を抑える前提）",
+    description:
+      "高断熱・高性能住宅。光熱費や修繕費を抑える前提です。",
   },
   {
-    value: "standard",
+    value: "detached",
     title: "一般戸建",
-    description: "標準的な一戸建て住宅",
+    description: "標準的な一戸建て住宅。",
   },
   {
-    value: "mansion",
+    value: "condo",
     title: "分譲マンション",
-    description: "マンションでの生活スタイル",
+    description: "マンションでの生活スタイル。",
   },
   {
-    value: "rental",
+    value: "rent",
     title: "賃貸",
-    description: "購入せず住み替えを前提とした選択",
+    description: "購入せず住み替えを前提とした選択肢。",
   },
-];
+] as const;
+
+const isHousingType = (value: string): value is HousingType =>
+  housingOptions.some((option) => option.value === value);
+
+const parseNumberInput = (value: string) => {
+  const trimmed = value.trim();
+  if (!trimmed) return undefined;
+  const parsed = Number(trimmed);
+  return Number.isFinite(parsed) ? parsed : undefined;
+};
+
+const mapHouseholdType = (value: string): HouseholdType | undefined => {
+  if (value === "single") return "single";
+  if (value === "couple") return "couple";
+  if (value === "family") return "couple_kids";
+  if (value === "other") return "other";
+  return undefined;
+};
 
 export default function PlanCreationWizard() {
   const router = useRouter();
+  const repos = useMemo(() => createRepositories(), []);
   const [step, setStep] = useState(1);
+  const [isSaving, setIsSaving] = useState(false);
   const [formData, setFormData] = useState<FormData>({
     planName: "",
     householdType: "couple",
@@ -77,11 +102,11 @@ export default function PlanCreationWizard() {
 
   const handleNext = () => {
     if (step === 1 && !formData.planName.trim()) {
-      alert("プラン名を入力してください");
+      toast.error("プラン名を入力してください");
       return;
     }
     if (step === 2 && !formData.housingType) {
-      alert("住宅タイプを選択してください");
+      toast.error("住宅タイプを選択してください");
       return;
     }
     if (step < 3) {
@@ -95,10 +120,48 @@ export default function PlanCreationWizard() {
     }
   };
 
-  const handleSubmit = () => {
-    // Mock submission - navigate to new plan dashboard
-    console.log("Creating plan with data:", formData);
-    router.push("/plans/1");
+  const handleSubmit = async () => {
+    if (!formData.planName.trim()) {
+      toast.error("プラン名を入力してください");
+      setStep(1);
+      return;
+    }
+    if (!isHousingType(formData.housingType)) {
+      toast.error("住宅タイプを選択してください");
+      setStep(2);
+      return;
+    }
+
+    const annualIncomeYen = parseNumberInput(formData.annualIncome);
+    const incomeMonthlyYen =
+      annualIncomeYen !== undefined
+        ? Math.round(annualIncomeYen / 12)
+        : undefined;
+    const assetsBalanceYen = parseNumberInput(formData.assetBalance);
+    const liabilitiesBalanceYen = parseNumberInput(formData.loanBalance);
+
+    setIsSaving(true);
+    try {
+      const result = await createPlanWizard({
+        repos,
+        input: {
+          name: formData.planName.trim(),
+          householdType: mapHouseholdType(formData.householdType),
+          note: formData.notes.trim() || undefined,
+          housingType: formData.housingType,
+          incomeMonthlyYen,
+          assetsBalanceYen,
+          liabilitiesBalanceYen,
+        },
+      });
+      toast.success("プランを作成しました");
+      router.push(`/plans/${result.planId}`);
+    } catch (error) {
+      console.error(error);
+      toast.error("プラン作成に失敗しました");
+    } finally {
+      setIsSaving(false);
+    }
   };
 
   const getHouseholdTypeLabel = (type: string) => {
@@ -144,13 +207,13 @@ export default function PlanCreationWizard() {
             <CardHeader>
               <CardTitle className="text-2xl">プランの基本情報</CardTitle>
               <CardDescription>
-                まずは基本的な情報を入力してください
+                まずは基本となる情報を入力してください。
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-6">
               <div className="space-y-2">
                 <Label htmlFor="planName">
-                  プラン名 <span className="text-destructive">*</span>
+                  プラン名<span className="text-destructive">*</span>
                 </Label>
                 <Input
                   id="planName"
@@ -207,7 +270,7 @@ export default function PlanCreationWizard() {
             <CardHeader>
               <CardTitle className="text-2xl">住宅タイプ</CardTitle>
               <CardDescription>
-                お住まいのタイプを選択してください
+                お住まいのタイプを選択してください。
               </CardDescription>
             </CardHeader>
             <CardContent>
@@ -264,12 +327,14 @@ export default function PlanCreationWizard() {
                 初期サマリー（ざっくり）
               </CardTitle>
               <CardDescription>
-                おおよその数字でOKです。あとからいつでも修正できます
+                おおよその数字でOKです。あとから修正できます。
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-6">
               <div className="space-y-2">
-                <Label htmlFor="annualIncome">世帯年収（手取り・概算）</Label>
+                <Label htmlFor="annualIncome">
+                  世帯年収（手取り・概算）
+                </Label>
                 <div className="relative">
                   <Input
                     id="annualIncome"
@@ -286,7 +351,7 @@ export default function PlanCreationWizard() {
                   </span>
                 </div>
                 <p className="text-xs text-muted-foreground">
-                  正確でなくてOK。あとで修正できます
+                  正確でなくてOK。あとで修正できます。
                 </p>
               </div>
 
@@ -310,7 +375,9 @@ export default function PlanCreationWizard() {
               </div>
 
               <div className="space-y-2">
-                <Label htmlFor="loanBalance">住宅ローン残高（なければ0）</Label>
+                <Label htmlFor="loanBalance">
+                  住宅ローン残高（なければ0）
+                </Label>
                 <div className="relative">
                   <Input
                     id="loanBalance"
@@ -353,15 +420,15 @@ export default function PlanCreationWizard() {
               </div>
 
               <p className="text-center text-sm text-muted-foreground">
-                あとからいつでも修正できます
+                あとからいつでも修正できます。
               </p>
             </CardContent>
             <CardFooter className="flex justify-between">
-              <Button variant="outline" onClick={handleBack}>
+              <Button variant="outline" onClick={handleBack} disabled={isSaving}>
                 <ArrowLeft className="mr-2 h-4 w-4" />
                 戻る
               </Button>
-              <Button onClick={handleSubmit}>
+              <Button onClick={handleSubmit} disabled={isSaving}>
                 <Check className="mr-2 h-4 w-4" />
                 この内容でプランを作成
               </Button>

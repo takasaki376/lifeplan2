@@ -110,6 +110,9 @@ export class IndexedDbVersionRepository {
           versionNo: 1,
           title: input?.title,
           changeNote: input?.changeNote,
+          incomeMonthlyYen: input?.incomeMonthlyYen,
+          assetsBalanceYen: input?.assetsBalanceYen,
+          liabilitiesBalanceYen: input?.liabilitiesBalanceYen,
           isCurrent: true,
           createdAt: now,
         };
@@ -179,6 +182,9 @@ export class IndexedDbVersionRepository {
           versionNo,
           title: current.title,
           changeNote,
+          incomeMonthlyYen: current.incomeMonthlyYen,
+          assetsBalanceYen: current.assetsBalanceYen,
+          liabilitiesBalanceYen: current.liabilitiesBalanceYen,
           isCurrent: false,
           createdAt: now,
         };
