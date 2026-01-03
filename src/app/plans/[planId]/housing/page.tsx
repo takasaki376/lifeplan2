@@ -38,6 +38,7 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { Alert, AlertDescription } from "@/components/ui/alert";
+import type { ScenarioKey } from "@/lib/domain/types";
 
 // Toggle for empty state testing
 const HAS_HOUSING_ASSUMPTIONS = true;
@@ -49,7 +50,6 @@ const MOCK_PLAN = {
 };
 
 type HousingType = "high_performance_home" | "detached" | "condo" | "rent";
-type ScenarioKey = "conservative" | "base" | "optimistic";
 
 interface LCCBreakdown {
   initial: number;

@@ -1,4 +1,9 @@
-import type { HousingAssumptions, HousingType, Id } from "../../domain/types";
+import type {
+  HousingAssumptions,
+  HousingType,
+  Id,
+  ScenarioPreset,
+} from "../../domain/types";
 import { getByIndex, txPut } from "../../db";
 import type { DbTx } from "../../db";
 import { STORES } from "../../db/schema";
@@ -149,7 +154,7 @@ export class IndexedDbHousingRepository {
   async applyPreset(
     planVersionId: Id,
     housingType: HousingType,
-    preset: "conservative" | "base" | "optimistic",
+    preset: ScenarioPreset,
     ctx?: RepoContext,
   ): Promise<void> {
     const presetMap = DEFAULT_HOUSING_PRESETS[preset];

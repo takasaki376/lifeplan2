@@ -1,4 +1,4 @@
-import type { HousingAssumptions, HousingType } from "../types";
+import type { HousingAssumptions, HousingType, ScenarioPreset } from "../types";
 
 type DistributiveOmit<T, K extends PropertyKey> = T extends unknown
   ? Omit<T, K>
@@ -22,12 +22,15 @@ const baseHousingDefaults: Record<HousingType, HousingDefaultsInput> = {
     repaymentType: "annuity",
     propertyTaxAnnualYen: 140000,
     utilitiesBaseMonthlyYen: 14000,
-    utilitiesFactor: 1,
+    utilitiesFactor: 0.85,
     typeSpecific: {
       insulationGrade: "G2",
       solarCapacityKw: 4,
     },
-    repairsSchedule: [],
+    repairsSchedule: [
+      { cycleYears: 20, amountYen: 1200000 },
+      { cycleYears: 40, amountYen: 1500000 },
+    ],
   },
   detached: {
     housingType: "detached",
@@ -46,7 +49,11 @@ const baseHousingDefaults: Record<HousingType, HousingDefaultsInput> = {
       landCostYen: 12000000,
       buildCostYen: 20000000,
     },
-    repairsSchedule: [],
+    repairsSchedule: [
+      { cycleYears: 10, amountYen: 1500000 },
+      { cycleYears: 20, amountYen: 1500000 },
+      { cycleYears: 30, amountYen: 2500000 },
+    ],
   },
   condo: {
     housingType: "condo",
@@ -60,10 +67,11 @@ const baseHousingDefaults: Record<HousingType, HousingDefaultsInput> = {
     repaymentType: "annuity",
     propertyTaxAnnualYen: 100000,
     utilitiesBaseMonthlyYen: 12000,
-    utilitiesFactor: 1,
+    utilitiesFactor: 0.95,
     typeSpecific: {
-      managementFeeMonthlyYen: 15000,
-      repairReserveMonthlyYen: 10000,
+      managementFeeMonthlyYen: 18000,
+      repairReserveMonthlyYen: 12000,
+      parkingFeeMonthlyYen: 0,
     },
   },
   rent: {
@@ -72,8 +80,10 @@ const baseHousingDefaults: Record<HousingType, HousingDefaultsInput> = {
     utilitiesBaseMonthlyYen: 12000,
     utilitiesFactor: 1,
     typeSpecific: {
-      rentMonthlyYen: 90000,
-      renewalFeeYen: 90000,
+      rentMonthlyYen: 130000,
+      renewalFeeYen: 130000,
+      renewalCycleYears: 2,
+      movingCostYen: 300000,
       depositYen: 90000,
       keyMoneyYen: 90000,
     },
@@ -81,7 +91,7 @@ const baseHousingDefaults: Record<HousingType, HousingDefaultsInput> = {
 };
 
 export const DEFAULT_HOUSING_PRESETS: Record<
-  "conservative" | "base" | "optimistic",
+  ScenarioPreset,
   Record<HousingType, HousingDefaultsInput>
 > = {
   conservative: baseHousingDefaults,

@@ -1,4 +1,9 @@
-import type { HousingAssumptions, HousingType, Id } from "../../domain/types";
+import type {
+  HousingAssumptions,
+  HousingType,
+  Id,
+  ScenarioPreset,
+} from "../../domain/types";
 import type { HousingAssumptionsInput, RepoContext } from "../types";
 
 export interface HousingRepository {
@@ -23,7 +28,7 @@ export interface HousingRepository {
   applyPreset(
     planVersionId: Id,
     housingType: HousingType,
-    preset: "conservative" | "base" | "optimistic",
+    preset: ScenarioPreset,
     ctx?: RepoContext,
   ): Promise<void>;
 }

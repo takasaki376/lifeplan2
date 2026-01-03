@@ -4,6 +4,7 @@ export type YearMonth = `${number}-${string}`; // e.g. "2026-01"
 export type MoneyYen = number; // MVP: integer yen
 
 export type ScenarioKey = "conservative" | "base" | "optimistic";
+export type ScenarioPreset = ScenarioKey;
 export type HouseholdType = "single" | "couple" | "couple_kids" | "other";
 
 export interface Plan {
@@ -146,6 +147,7 @@ export interface CondoAssumptions extends HousingCommonAssumptions {
   typeSpecific?: {
     managementFeeMonthlyYen?: MoneyYen;
     repairReserveMonthlyYen?: MoneyYen;
+    parkingFeeMonthlyYen?: MoneyYen;
   };
 }
 
@@ -154,6 +156,8 @@ export interface RentAssumptions extends HousingCommonAssumptions {
   typeSpecific?: {
     rentMonthlyYen?: MoneyYen;
     renewalFeeYen?: MoneyYen;
+    renewalCycleYears?: number;
+    movingCostYen?: MoneyYen;
     depositYen?: MoneyYen;
     keyMoneyYen?: MoneyYen;
   };

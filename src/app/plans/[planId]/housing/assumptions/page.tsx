@@ -49,6 +49,7 @@ import {
   AccordionTrigger,
 } from "@/components/ui/accordion";
 import { Badge } from "@/components/ui/badge";
+import type { ScenarioKey, ScenarioPreset } from "@/lib/domain/types";
 // import { useToast } from "@/hooks/use-toast";
 import { toast } from "sonner";
 
@@ -57,8 +58,6 @@ const HAS_ASSUMPTIONS = true;
 
 type HousingType = "high_performance_home" | "detached" | "condo" | "rent";
 type EditMode = "simple" | "advanced";
-type Scenario = "conservative" | "base" | "optimistic";
-type Preset = "base" | "conservative" | "optimistic";
 
 interface RepairItem {
   id: string;
@@ -177,12 +176,13 @@ export default function HousingAssumptionsPage() {
     "high_performance_home"
   );
   const [editMode, setEditMode] = useState<EditMode>("simple");
-  const [scenario, setScenario] = useState<Scenario>("base");
+  const [scenario, setScenario] = useState<ScenarioKey>("base");
   const [horizonYears, setHorizonYears] = useState(35);
   const [isDirty, setIsDirty] = useState(false);
   const [assumptions, setAssumptions] =
     useState<Record<HousingType, Assumptions>>(DEFAULT_ASSUMPTIONS);
-  const [selectedPreset, setSelectedPreset] = useState<Preset>("base");
+  const [selectedPreset, setSelectedPreset] =
+    useState<ScenarioPreset>("base");
 
   const currentAssumptions = assumptions[activeType];
 
@@ -293,7 +293,7 @@ export default function HousingAssumptionsPage() {
     setIsDirty(true);
   };
 
-  const applyPreset = (preset: Preset) => {
+  const applyPreset = (preset: ScenarioPreset) => {
     const multiplier =
       preset === "conservative" ? 1.15 : preset === "optimistic" ? 0.85 : 1.0;
     const baseAssumptions = DEFAULT_ASSUMPTIONS[activeType];
@@ -553,8 +553,8 @@ export default function HousingAssumptionsPage() {
                       <Select
                         value={selectedPreset}
                         onValueChange={(v) => {
-                          setSelectedPreset(v as Preset);
-                          applyPreset(v as Preset);
+                          setSelectedPreset(v as ScenarioPreset);
+                          applyPreset(v as ScenarioPreset);
                         }}
                       >
                         <SelectTrigger className="w-48">
