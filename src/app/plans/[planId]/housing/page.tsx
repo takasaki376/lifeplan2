@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import {
@@ -39,15 +39,10 @@ import {
 } from "@/components/ui/tooltip";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import type { ScenarioKey } from "@/lib/domain/types";
+import { createRepositories } from "@/lib/repo/factory";
 
 // Toggle for empty state testing
 const HAS_HOUSING_ASSUMPTIONS = true;
-
-// Mock data
-const MOCK_PLAN = {
-  id: "plan-001",
-  name: "田中家のライフプラン 2024",
-};
 
 type HousingType = "high_performance_home" | "detached" | "condo" | "rent";
 
@@ -84,6 +79,8 @@ export default function HousingLCCPage() {
   const params = useParams();
   const router = useRouter();
   const planId = params.planId as string;
+  const repos = useMemo(() => createRepositories(), []);
+  const [planName, setPlanName] = useState("プラン");
 
   const [scenarioKey, setScenarioKey] = useState<ScenarioKey>("base");
   const [horizonYears, setHorizonYears] = useState<string>("35");
@@ -91,6 +88,20 @@ export default function HousingLCCPage() {
     "high_performance_home"
   );
   const [chartView, setChartView] = useState<ChartView>("total");
+
+  useEffect(() => {
+    const load = async () => {
+      try {
+        const plan = await repos.plan.get(planId);
+        if (plan?.name) {
+          setPlanName(plan.name);
+        }
+      } catch (error) {
+        console.error(error);
+      }
+    };
+    void load();
+  }, [planId, repos]);
 
   // Mock LCC data per scenario
   const mockLCCData: Record<ScenarioKey, HousingLCC[]> = {
@@ -302,7 +313,7 @@ export default function HousingLCCPage() {
             </Link>
             <ChevronRight className="h-4 w-4" />
             <Link href={`/plans/${planId}`} className="hover:text-foreground">
-              {MOCK_PLAN.name}
+              {planName}
             </Link>
             <ChevronRight className="h-4 w-4" />
             <span className="text-foreground">住宅LCC</span>
@@ -354,7 +365,7 @@ export default function HousingLCCPage() {
           </Link>
           <ChevronRight className="h-4 w-4" />
           <Link href={`/plans/${planId}`} className="hover:text-foreground">
-            {MOCK_PLAN.name}
+            {planName}
           </Link>
           <ChevronRight className="h-4 w-4" />
           <span className="text-foreground">住宅LCC</span>

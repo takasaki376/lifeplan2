@@ -254,8 +254,8 @@ export default function MonthlyListPage() {
   return (
     <div className="min-h-screen bg-muted/30">
       {/* Header */}
-      <div className="border-b bg-background">
-        <div className="container max-w-5xl py-6">
+      <div className="border-b bg-card">
+        <div className="container mx-auto px-4 sm:px-6 py-6">
           {/* Breadcrumb */}
           <nav className="flex items-center gap-2 text-sm text-muted-foreground mb-4">
             <Link href="/" className="hover:text-foreground transition-colors">
@@ -269,7 +269,7 @@ export default function MonthlyListPage() {
               {plan?.name ?? "プラン"}
             </Link>
             <ChevronRight className="h-4 w-4" />
-            <span className="text-foreground">月次</span>
+            <span className="text-foreground font-medium">月次</span>
           </nav>
 
           {/* Title and actions */}
@@ -311,7 +311,7 @@ export default function MonthlyListPage() {
       </div>
 
       {/* Main content */}
-      <div className="container max-w-5xl py-8">
+      <main className="container mx-auto px-4 sm:px-6 py-6 sm:py-8">
         {error ? (
           <Alert variant="destructive">
             <AlertTitle>読み込みに失敗しました</AlertTitle>
@@ -649,7 +649,7 @@ export default function MonthlyListPage() {
             </div>
           </>
         )}
-      </div>
+      </main>
 
       <AlertDialog
         open={Boolean(confirmDelete)}
