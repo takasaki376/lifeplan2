@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import {
@@ -35,88 +35,49 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import { formatYearMonth, getCurrentYearMonth } from "@/lib/format";
+import type {
+  HousingAssumptions,
+  LifeEvent,
+  MonthlyRecord,
+  Plan,
+  PlanVersion,
+} from "@/lib/domain/types";
+import { createRepositories } from "@/lib/repo/factory";
 
-// Mock data toggle
-const MOCK_HAS_DATA = true;
+type DashboardState =
+  | "FIRST_TIME"
+  | "NEEDS_HOUSING"
+  | "NEEDS_SELECTION"
+  | "NEEDS_EVENTS"
+  | "READY";
 
-interface MonthlyStatus {
-  year: number;
-  month: number;
-  isComplete: boolean;
-  income: number;
-  expense: number;
-  balance: number;
-  lastUpdated: string;
-}
-
-interface AssetSnapshot {
-  assets: number;
-  liabilities: number;
-}
-
-interface LifeEvent {
-  id: string;
-  date: string;
-  title: string;
-  amount: number;
-  type: "recurring" | "one-time";
-}
-
-interface Version {
-  version: string;
-  date: string;
-  note: string;
-}
-
-const mockMonthlyStatus: MonthlyStatus = {
-  year: 2026,
-  month: 1,
-  isComplete: false,
-  income: 620000,
-  expense: 588000,
-  balance: 32000,
-  lastUpdated: "2026/01/02",
-};
-
-const mockAssetSnapshot: AssetSnapshot = {
-  assets: 8450000,
-  liabilities: 28900000,
-};
-
-const mockLifeEvents: LifeEvent[] = [
-  {
-    id: "1",
-    date: "2026/04",
-    title: "保育料（毎月）",
-    amount: 40000,
-    type: "recurring",
-  },
-  {
-    id: "2",
-    date: "2027/03",
-    title: "入学準備（単発）",
-    amount: 200000,
-    type: "one-time",
-  },
-];
-
-const mockVersion: Version = {
-  version: "v3",
-  date: "2025/12/15",
-  note: "金利を 0.8% → 1.2% に変更",
-};
+const REQUIRED_HOUSING_TYPES = 4;
 
 export default function PlanDashboardPage() {
   const params = useParams();
   const planId = params.planId as string;
+  const repos = useMemo(() => createRepositories(), []);
+  const currentYm = getCurrentYearMonth();
 
-  const [hasData] = useState(MOCK_HAS_DATA);
+  const [plan, setPlan] = useState<Plan | null>(null);
+  const [currentVersion, setCurrentVersion] = useState<PlanVersion | null>(null);
+  const [currentMonthly, setCurrentMonthly] = useState<MonthlyRecord | null>(null);
+  const [housingAssumptions, setHousingAssumptions] = useState<
+    HousingAssumptions[]
+  >([]);
+  const [recentEvents, setRecentEvents] = useState<LifeEvent[]>([]);
+  const [eventCount, setEventCount] = useState(0);
+  const [dashboardState, setDashboardState] = useState<DashboardState>("READY");
+  const [isLoading, setIsLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [scenario, setScenario] = useState<
     "conservative" | "standard" | "optimistic"
   >("standard");
   const [selectedTab, setSelectedTab] = useState("dashboard");
 
-  const planName = "山田家 2026";
+  const planName = plan?.name ?? "プラン";
 
   const formatCurrency = (amount: number) => {
     return new Intl.NumberFormat("ja-JP", {
@@ -126,8 +87,34 @@ export default function PlanDashboardPage() {
     }).format(amount);
   };
 
-  const getCurrentMonth = () => {
-    return `${mockMonthlyStatus.year}年${mockMonthlyStatus.month}月`;
+  const formatCurrencyMaybe = (amount?: number) => {
+    if (amount === null || amount === undefined) return "-";
+    return formatCurrency(amount);
+  };
+
+  const getCurrentMonthLabel = () => {
+    const formatted = formatYearMonth(currentYm);
+    if (formatted && formatted !== "?") return formatted;
+    const now = new Date();
+    return `${now.getFullYear()}年${now.getMonth() + 1}月`;
+  };
+
+  const formatDateShort = (value: string) => {
+    const parsed = new Date(value);
+    if (Number.isNaN(parsed.getTime())) return value;
+    return parsed.toLocaleDateString("ja-JP");
+  };
+
+  const resolveDashboardState = (
+    monthly: MonthlyRecord | null | undefined,
+    housing: HousingAssumptions[],
+    eventsLength: number
+  ): DashboardState => {
+    if (!monthly) return "FIRST_TIME";
+    if (housing.length < REQUIRED_HOUSING_TYPES) return "NEEDS_HOUSING";
+    if (!housing.some((item) => item.isSelected)) return "NEEDS_SELECTION";
+    if (eventsLength === 0) return "NEEDS_EVENTS";
+    return "READY";
   };
 
   const getScenarioLabel = (s: typeof scenario) => {
@@ -138,6 +125,122 @@ export default function PlanDashboardPage() {
     };
     return labels[s];
   };
+
+  useEffect(() => {
+    let active = true;
+    const load = async () => {
+      setIsLoading(true);
+      setLoadError(null);
+      setPlan(null);
+      setCurrentVersion(null);
+      setCurrentMonthly(null);
+      setHousingAssumptions([]);
+      setRecentEvents([]);
+      setEventCount(0);
+      setDashboardState("READY");
+      try {
+        const [planData, versionData] = await Promise.all([
+          repos.plan.get(planId),
+          repos.version.getCurrent(planId),
+        ]);
+
+        if (!planData) {
+          if (!active) return;
+          setLoadError("プランが見つかりません");
+          return;
+        }
+
+        if (!versionData) {
+          if (!active) return;
+          setLoadError("現行バージョンが見つかりません");
+          return;
+        }
+
+        if (!active) return;
+        setPlan(planData);
+        setCurrentVersion(versionData);
+
+        const [monthly, housing, events] = await Promise.all([
+          repos.monthly.getByYm(planId, currentYm),
+          repos.housing.listByVersion(versionData.id),
+          repos.event.listByVersion(versionData.id, { scope: "all" }),
+        ]);
+
+        if (!active) return;
+        setCurrentMonthly(monthly ?? null);
+        setHousingAssumptions(housing);
+        const upcoming = events.filter((event) => event.startYm >= currentYm);
+        const previewEvents = (upcoming.length ? upcoming : events).slice(0, 3);
+        setRecentEvents(previewEvents);
+        setEventCount(events.length);
+        setDashboardState(resolveDashboardState(monthly, housing, events.length));
+      } catch (error) {
+        console.error(error);
+        if (!active) return;
+        setLoadError("読み込みに失敗しました");
+      } finally {
+        if (!active) return;
+        setIsLoading(false);
+      }
+    };
+
+    void load();
+    return () => {
+      active = false;
+    };
+  }, [currentYm, planId, repos]);
+
+  const hasMonthlyRecord = Boolean(currentMonthly);
+  const isMonthlyComplete = currentMonthly?.isFinalized ?? false;
+  const hasHousingAssumptions = housingAssumptions.length >= REQUIRED_HOUSING_TYPES;
+  const hasSelectedHousing = housingAssumptions.some((item) => item.isSelected);
+  const hasEvents = eventCount > 0;
+  const showForecast = dashboardState === "READY";
+  const showHousingSummary = hasHousingAssumptions && hasSelectedHousing;
+  const currentMonthLabel = getCurrentMonthLabel();
+  const lastUpdated = currentMonthly?.updatedAt
+    ? formatDateShort(currentMonthly.updatedAt)
+    : undefined;
+  const incomeTotal = currentMonthly?.incomeTotalYen;
+  const expenseTotal = currentMonthly?.expenseTotalYen;
+  const balanceValue =
+    incomeTotal !== undefined && expenseTotal !== undefined
+      ? incomeTotal - expenseTotal
+      : undefined;
+  const assetsBalance = currentMonthly?.assetsBalanceYen;
+  const liabilitiesBalance = currentMonthly?.liabilitiesBalanceYen;
+  const versionLabel = currentVersion ? `v${currentVersion.versionNo}` : "-";
+  const versionDate = currentVersion?.createdAt
+    ? formatDateShort(currentVersion.createdAt)
+    : undefined;
+  const versionNote = currentVersion?.changeNote;
+  const nextActions = [
+    {
+      key: "monthly",
+      label: "今月の家計を入力",
+      done: isMonthlyComplete,
+      href: `/plans/${planId}/months/current`,
+    },
+    {
+      key: "housing-assumptions",
+      label: "住宅前提を設定",
+      done: hasHousingAssumptions,
+      href: `/plans/${planId}/housing/assumptions`,
+    },
+    {
+      key: "housing-selection",
+      label: "住宅タイプを選択",
+      done: hasSelectedHousing,
+      href: `/plans/${planId}/housing`,
+      visible: hasHousingAssumptions,
+    },
+    {
+      key: "events",
+      label: "イベントを追加",
+      done: hasEvents,
+      href: `/plans/${planId}/events/new`,
+    },
+  ].filter((item) => item.visible !== false);
 
   return (
     <div className="min-h-screen bg-muted/30">
@@ -267,34 +370,121 @@ export default function PlanDashboardPage() {
 
       {/* Main Content */}
       <main className="container mx-auto px-4 py-6 sm:px-6 sm:py-8">
-        <div className="grid grid-cols-1 gap-6 lg:grid-cols-12">
-          {/* Left Column: Primary Cards (8 cols on desktop) */}
-          <div className="space-y-6 lg:col-span-8">
-            {/* 1) HERO STATUS CARD: Current Month */}
-            <Card className="shadow-sm">
+        {loadError ? (
+          <div className="space-y-4">
+            <Alert variant="destructive">
+              <AlertTitle>読み込みに失敗しました</AlertTitle>
+              <AlertDescription>{loadError}</AlertDescription>
+            </Alert>
+            <Button asChild variant="outline">
+              <Link href="/">プラン一覧へ戻る</Link>
+            </Button>
+          </div>
+        ) : isLoading ? (
+          <Card className="p-8 text-center text-sm text-muted-foreground">
+            読み込み中...
+          </Card>
+        ) : (
+          <div className="grid grid-cols-1 gap-6 lg:grid-cols-12">
+            {/* Left Column: Primary Cards (8 cols on desktop) */}
+            <div className="space-y-6 lg:col-span-8">
+              {dashboardState === "FIRST_TIME" && (
+                <Card className="shadow-sm">
+                  <CardHeader>
+                    <CardTitle className="text-xl">
+                      まずは今月の合計を入力しましょう
+                    </CardTitle>
+                    <CardDescription>
+                      正確でなくてOK。あとから修正できます。
+                    </CardDescription>
+                  </CardHeader>
+                  <CardFooter className="flex flex-wrap gap-2">
+                    <Button asChild>
+                      <Link href={`/plans/${planId}/months/current`}>
+                        今月を入力
+                      </Link>
+                    </Button>
+                    <Button asChild variant="outline">
+                      <Link href={`/plans/${planId}/months`}>月次一覧を見る</Link>
+                    </Button>
+                  </CardFooter>
+                </Card>
+              )}
+              {dashboardState === "NEEDS_HOUSING" && (
+                <Card className="shadow-sm border-amber-200 bg-amber-50/40">
+                  <CardHeader>
+                    <CardTitle className="text-lg">
+                      住宅LCC比較を使うには前提の設定が必要です
+                    </CardTitle>
+                  </CardHeader>
+                  <CardFooter className="flex flex-wrap gap-2">
+                    <Button asChild>
+                      <Link href={`/plans/${planId}/housing/assumptions`}>
+                        住宅前提を設定
+                      </Link>
+                    </Button>
+                    <Button asChild variant="outline">
+                      <Link href={`/plans/${planId}/housing`}>比較トップへ</Link>
+                    </Button>
+                  </CardFooter>
+                </Card>
+              )}
+              {dashboardState === "NEEDS_SELECTION" && (
+                <Card className="shadow-sm border-amber-200 bg-amber-50/40">
+                  <CardHeader>
+                    <CardTitle className="text-lg">
+                      比較する住宅タイプを選択しましょう
+                    </CardTitle>
+                  </CardHeader>
+                  <CardFooter>
+                    <Button asChild>
+                      <Link href={`/plans/${planId}/housing`}>住宅LCC比較へ</Link>
+                    </Button>
+                  </CardFooter>
+                </Card>
+              )}
+              {dashboardState === "NEEDS_EVENTS" && (
+                <Card className="shadow-sm">
+                  <CardHeader>
+                    <CardTitle className="text-lg">
+                      イベントを追加すると見通しが良くなります
+                    </CardTitle>
+                  </CardHeader>
+                  <CardFooter className="flex flex-wrap gap-2">
+                    <Button asChild>
+                      <Link href={`/plans/${planId}/events/new`}>
+                        イベントを追加
+                      </Link>
+                    </Button>
+                    <Button asChild variant="outline">
+                      <Link href={`/plans/${planId}/events`}>イベント一覧</Link>
+                    </Button>
+                  </CardFooter>
+                </Card>
+              )}
+              {/* 1) HERO STATUS CARD: Current Month */}
+              <Card className="shadow-sm">
               <CardHeader>
                 <div className="flex items-start justify-between">
                   <div>
                     <CardTitle className="text-2xl">
-                      今月（{getCurrentMonth()}）の状況
+                      今月（{currentMonthLabel}）の状況
                     </CardTitle>
                     <CardDescription className="mt-1">
                       最終更新:{" "}
-                      {hasData ? mockMonthlyStatus.lastUpdated : "未入力"}
+                      {hasMonthlyRecord && lastUpdated ? lastUpdated : "未入力"}
                     </CardDescription>
                   </div>
-                  {hasData ? (
+                  {hasMonthlyRecord ? (
                     <Badge
-                      variant={
-                        mockMonthlyStatus.isComplete ? "default" : "destructive"
-                      }
+                      variant={isMonthlyComplete ? "default" : "destructive"}
                       className={
-                        mockMonthlyStatus.isComplete
+                        isMonthlyComplete
                           ? "bg-green-500 hover:bg-green-600"
                           : ""
                       }
                     >
-                      {mockMonthlyStatus.isComplete ? (
+                      {isMonthlyComplete ? (
                         <>
                           <CheckCircle2 className="mr-1 h-3 w-3" />
                           入力済み
@@ -315,7 +505,7 @@ export default function PlanDashboardPage() {
                 </div>
               </CardHeader>
               <CardContent className="space-y-6">
-                {hasData ? (
+                {hasMonthlyRecord ? (
                   <div className="grid gap-4 sm:grid-cols-3">
                     <div className="rounded-lg border bg-muted/50 p-4 text-center">
                       <p className="text-sm text-muted-foreground">
@@ -323,25 +513,30 @@ export default function PlanDashboardPage() {
                       </p>
                       <p
                         className={`mt-2 text-3xl font-bold ${
-                          mockMonthlyStatus.balance >= 0
-                            ? "text-green-600"
-                            : "text-red-600"
+                          balanceValue === undefined
+                            ? "text-muted-foreground"
+                            : balanceValue >= 0
+                              ? "text-green-600"
+                              : "text-red-600"
                         }`}
                       >
-                        {mockMonthlyStatus.balance >= 0 ? "+" : ""}
-                        {formatCurrency(mockMonthlyStatus.balance)}
+                        {balanceValue !== undefined
+                          ? `${balanceValue >= 0 ? "+" : ""}${formatCurrency(
+                              balanceValue
+                            )}`
+                          : "-"}
                       </p>
                     </div>
                     <div className="rounded-lg border bg-muted/50 p-4 text-center">
                       <p className="text-sm text-muted-foreground">収入合計</p>
                       <p className="mt-2 text-3xl font-bold text-foreground">
-                        {formatCurrency(mockMonthlyStatus.income)}
+                        {formatCurrencyMaybe(incomeTotal)}
                       </p>
                     </div>
                     <div className="rounded-lg border bg-muted/50 p-4 text-center">
                       <p className="text-sm text-muted-foreground">支出合計</p>
                       <p className="mt-2 text-3xl font-bold text-foreground">
-                        {formatCurrency(mockMonthlyStatus.expense)}
+                        {formatCurrencyMaybe(expenseTotal)}
                       </p>
                     </div>
                   </div>
@@ -359,7 +554,7 @@ export default function PlanDashboardPage() {
               <CardFooter className="flex gap-2">
                 <Button asChild className="flex-1 sm:flex-none">
                   <Link href={`/plans/${planId}/months/current`}>
-                    {hasData && mockMonthlyStatus.isComplete
+                    {isMonthlyComplete
                       ? "今月の内訳を見る"
                       : "今月を入力する"}
                   </Link>
@@ -368,7 +563,7 @@ export default function PlanDashboardPage() {
                   <Link href={`/plans/${planId}/months`}>月次一覧へ</Link>
                 </Button>
               </CardFooter>
-            </Card>
+              </Card>
 
             {/* 2) SNAPSHOT CARD: Assets & Liabilities */}
             <Card className="shadow-sm">
@@ -386,9 +581,7 @@ export default function PlanDashboardPage() {
                       <p className="text-sm font-medium">資産残高</p>
                     </div>
                     <p className="mt-3 text-3xl font-bold text-green-900 dark:text-green-300">
-                      {hasData
-                        ? formatCurrency(mockAssetSnapshot.assets)
-                        : formatCurrency(0)}
+                      {formatCurrencyMaybe(assetsBalance)}
                     </p>
                   </div>
                   <div className="rounded-lg border bg-gradient-to-br from-red-50 to-red-100/50 dark:from-red-950/20 dark:to-red-900/10 p-6">
@@ -397,9 +590,7 @@ export default function PlanDashboardPage() {
                       <p className="text-sm font-medium">負債残高</p>
                     </div>
                     <p className="mt-3 text-3xl font-bold text-red-900 dark:text-red-300">
-                      {hasData
-                        ? formatCurrency(mockAssetSnapshot.liabilities)
-                        : formatCurrency(0)}
+                      {formatCurrencyMaybe(liabilitiesBalance)}
                     </p>
                   </div>
                 </div>
@@ -424,7 +615,7 @@ export default function PlanDashboardPage() {
                 </CardDescription>
               </CardHeader>
               <CardContent className="space-y-4">
-                {hasData ? (
+                {showForecast ? (
                   <>
                     {/* Simple Mock Chart */}
                     <div className="rounded-lg border bg-muted/30 p-6">
@@ -505,13 +696,13 @@ export default function PlanDashboardPage() {
                       35年間の累計試算
                     </CardDescription>
                   </div>
-                  {hasData && (
-                    <Badge variant="secondary">住宅: 高性能住宅</Badge>
+                  {showHousingSummary && (
+                    <Badge variant="secondary">住宅: 選択済み</Badge>
                   )}
                 </div>
               </CardHeader>
               <CardContent className="space-y-4">
-                {hasData ? (
+                {showHousingSummary ? (
                   <>
                     <div className="rounded-lg border bg-gradient-to-br from-blue-50 to-blue-100/50 dark:from-blue-950/20 dark:to-blue-900/10 p-6 text-center">
                       <p className="text-sm font-medium text-blue-700 dark:text-blue-400">
@@ -563,10 +754,14 @@ export default function PlanDashboardPage() {
                   className="flex-1 sm:flex-none"
                 >
                   <Link href={`/plans/${planId}/housing`}>
-                    {hasData ? "比較を見る" : "住宅タイプを設定"}
+                    {showHousingSummary
+                      ? "比較を見る"
+                      : hasHousingAssumptions
+                        ? "住宅タイプを選択"
+                        : "住宅タイプを設定"}
                   </Link>
                 </Button>
-                {hasData && (
+                {showHousingSummary && (
                   <Button asChild variant="outline">
                     <Link href={`/plans/${planId}/housing/assumptions`}>
                       前提を調整
@@ -586,25 +781,9 @@ export default function PlanDashboardPage() {
               </CardHeader>
               <CardContent>
                 <div className="space-y-3">
-                  {[
-                    {
-                      label: "今月の家計を入力",
-                      done: hasData && mockMonthlyStatus.isComplete,
-                      href: `/plans/${planId}/months/current`,
-                    },
-                    {
-                      label: "住宅LCCの前提を確認",
-                      done: hasData,
-                      href: `/plans/${planId}/housing`,
-                    },
-                    {
-                      label: "ライフイベントを追加",
-                      done: hasData && mockLifeEvents.length > 0,
-                      href: `/plans/${planId}/events/new`,
-                    },
-                  ].map((item, i) => (
+                  {nextActions.map((item) => (
                     <div
-                      key={i}
+                      key={item.key}
                       className="flex items-center gap-3 rounded-lg border bg-card p-3 transition-colors hover:bg-muted/50"
                     >
                       <div
@@ -644,9 +823,9 @@ export default function PlanDashboardPage() {
                 <CardTitle className="text-lg">直近のライフイベント</CardTitle>
               </CardHeader>
               <CardContent>
-                {hasData && mockLifeEvents.length > 0 ? (
+                {recentEvents.length > 0 ? (
                   <div className="space-y-3">
-                    {mockLifeEvents.map((event) => (
+                    {recentEvents.map((event) => (
                       <div
                         key={event.id}
                         className="flex items-start gap-3 rounded-lg border bg-muted/30 p-3"
@@ -658,14 +837,14 @@ export default function PlanDashboardPage() {
                               {event.title}
                             </p>
                             <Badge variant="outline" className="text-xs">
-                              {event.type === "recurring" ? "毎月" : "単発"}
+                              {event.cadence === "monthly" ? "毎月" : "単発"}
                             </Badge>
                           </div>
                           <p className="text-xs text-muted-foreground">
-                            {event.date}
+                            {formatYearMonth(event.startYm)}
                           </p>
                           <p className="text-sm font-semibold text-foreground">
-                            {formatCurrency(event.amount)}
+                            {formatCurrency(event.amountYen)}
                           </p>
                         </div>
                       </div>
@@ -701,25 +880,27 @@ export default function PlanDashboardPage() {
                 <CardTitle className="text-lg">見直し（改定）</CardTitle>
               </CardHeader>
               <CardContent className="space-y-4">
-                {hasData ? (
+                {currentVersion ? (
                   <>
                     <div className="space-y-2 rounded-lg bg-muted/50 p-3">
                       <div className="flex items-center justify-between">
                         <span className="text-sm text-muted-foreground">
                           現行バージョン
                         </span>
-                        <Badge variant="secondary">{mockVersion.version}</Badge>
+                        <Badge variant="secondary">{versionLabel}</Badge>
                       </div>
-                      <p className="text-xs text-muted-foreground">
-                        改定 {mockVersion.date}
-                      </p>
+                      {versionDate && (
+                        <p className="text-xs text-muted-foreground">
+                          改定 {versionDate}
+                        </p>
+                      )}
                     </div>
                     <div className="rounded-lg border-l-4 border-primary bg-muted/30 p-3">
                       <p className="text-xs font-medium text-muted-foreground">
                         最終変更
                       </p>
                       <p className="mt-1 text-sm text-foreground">
-                        {mockVersion.note}
+                        {versionNote ?? "変更内容がまだありません"}
                       </p>
                     </div>
                   </>
@@ -753,7 +934,8 @@ export default function PlanDashboardPage() {
               </CardFooter>
             </Card>
           </div>
-        </div>
+          </div>
+        )}
       </main>
     </div>
   );
