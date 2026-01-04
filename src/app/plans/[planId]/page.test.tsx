@@ -60,13 +60,37 @@ vi.mock("@/lib/repo/factory", () => ({
   }),
 }));
 
+type FormatYenOptions = {
+  showDashForEmpty?: boolean;
+  sign?: "always" | "never" | "auto";
+};
+
 vi.mock("@/lib/format", () => ({
   getCurrentYearMonth: () => "2026-01",
   formatYearMonth: (ym: string) => {
     const [year, month] = ym.split("-");
     return `${year}年${Number(month)}月`;
   },
-  formatYen: (value: number) => `\${value}`,
+  formatYen: (
+    value: number | null | undefined,
+    options?: FormatYenOptions,
+  ) => {
+    const showDash =
+      options?.showDashForEmpty ??
+      true;
+    if (value === null || value === undefined) {
+      return showDash ? "-" : "";
+    }
+    const sign = options?.sign ?? "auto";
+    const formatted = `${Math.abs(value)}`;
+    if (sign === "always") {
+      return value >= 0 ? `+${formatted}` : `-${formatted}`;
+    }
+    if (sign === "never") {
+      return formatted;
+    }
+    return value >= 0 ? `${formatted}` : `-${formatted}`;
+  },
 }));
 
 const makePlan = (partial: Partial<Plan> & Pick<Plan, "id" | "name">): Plan => {
