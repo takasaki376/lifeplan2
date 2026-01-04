@@ -59,6 +59,8 @@ import {
   parseScenario,
   scenarioKeys,
 } from "@/lib/scenario";
+import { useScenarioNavigation } from "@/lib/hooks/useScenarioNavigation";
+import { useTabNavigation } from "@/lib/hooks/useTabNavigation";
 
 // Toggle for empty state testing
 const HAS_HOUSING_ASSUMPTIONS = true;
@@ -103,6 +105,8 @@ export default function HousingLCCPage() {
   const repos = useMemo(() => createRepositories(), []);
   const tabValue = "housing";
   const [planName, setPlanName] = useState("プラン");
+  const { changeScenario } = useScenarioNavigation();
+  const { changeTab } = useTabNavigation(planId);
 
   const scenarioParam = searchParams.get("scenario");
   const parsedScenario = parseScenario(scenarioParam);
@@ -324,28 +328,9 @@ export default function HousingLCCPage() {
   const currentData = mockLCCData[scenarioKey];
   const selectedHousing = currentData.find((h) => h.type === selectedType);
 
-  const handleScenarioChange = (value: ScenarioKey) => {
-    if (value === scenarioKey) return;
-    const nextParams = new URLSearchParams(searchParams.toString());
-    nextParams.set("scenario", value);
-    const query = nextParams.toString();
-    const nextUrl = query ? `${pathname}?${query}` : pathname;
-    void router.replace(nextUrl);
-  };
 
-  const handleTabChange = (value: string) => {
-    const routes: Record<string, string> = {
-      dashboard: `/plans/${planId}`,
-      monthly: `/plans/${planId}/months`,
-      housing: `/plans/${planId}/housing`,
-      events: `/plans/${planId}/events`,
-      versions: `/plans/${planId}/versions`,
-    };
-    const next = routes[value];
-    if (next) {
-      router.push(next);
-    }
-  };
+
+
 
   if (!HAS_HOUSING_ASSUMPTIONS) {
     return (
@@ -379,7 +364,7 @@ export default function HousingLCCPage() {
             <div className="px-4 sm:px-6">
               {/* Desktop Tabs */}
               <div className="hidden sm:block">
-                <Tabs value={tabValue} onValueChange={handleTabChange}>
+                <Tabs value={tabValue} onValueChange={changeTab}>
                   <TabsList className="h-auto w-full justify-start rounded-none border-0 bg-transparent p-0">
                     <TabsTrigger
                       value="dashboard"
@@ -436,34 +421,33 @@ export default function HousingLCCPage() {
                     </Button>
                   </DropdownMenuTrigger>
                   <DropdownMenuContent className="w-56">
-                    <DropdownMenuItem
-                      onSelect={() => handleTabChange("dashboard")}
-                    >
-                      <Home className="mr-2 h-4 w-4" />
-                      ダッシュボード
-                    </DropdownMenuItem>
-                    <DropdownMenuItem
-                      onSelect={() => handleTabChange("monthly")}
-                    >
-                      <Calendar className="mr-2 h-4 w-4" />
-                      月次
-                    </DropdownMenuItem>
-                    <DropdownMenuItem
-                      onSelect={() => handleTabChange("housing")}
-                    >
-                      <Home className="mr-2 h-4 w-4" />
-                      住宅LCC
-                    </DropdownMenuItem>
-                    <DropdownMenuItem
-                      onSelect={() => handleTabChange("events")}
-                    >
-                      <Calendar className="mr-2 h-4 w-4" />
-                      イベント
-                    </DropdownMenuItem>
-                    <DropdownMenuItem
-                      onSelect={() => handleTabChange("versions")}
-                    >
-                      <History className="mr-2 h-4 w-4" />
+                                      <DropdownMenuItem
+                                        onSelect={() => changeTab("dashboard")}
+                                      >
+                                        <Home className="mr-2 h-4 w-4" />
+                                        ダッシュボード
+                                      </DropdownMenuItem>
+                                      <DropdownMenuItem
+                                        onSelect={() => changeTab("monthly")}
+                                      >
+                                        <Calendar className="mr-2 h-4 w-4" />
+                                        月次
+                                      </DropdownMenuItem>
+                                      <DropdownMenuItem
+                                        onSelect={() => changeTab("housing")}
+                                      >
+                                        <Home className="mr-2 h-4 w-4" />
+                                        住宅LCC
+                                      </DropdownMenuItem>
+                                      <DropdownMenuItem
+                                        onSelect={() => changeTab("events")}
+                                      >
+                                        <Calendar className="mr-2 h-4 w-4" />
+                                        イベント
+                                      </DropdownMenuItem>
+                                      <DropdownMenuItem
+                                        onSelect={() => changeTab("versions")}
+                                      >                      <History className="mr-2 h-4 w-4" />
                       見直し（改定）
                     </DropdownMenuItem>
                   </DropdownMenuContent>
@@ -530,7 +514,7 @@ export default function HousingLCCPage() {
             <Tabs
               value={scenarioKey}
               onValueChange={(value) =>
-                handleScenarioChange(value as ScenarioKey)
+                changeScenario(value as ScenarioKey, scenarioKey)
               }
               className="w-full sm:w-auto"
             >
@@ -570,7 +554,7 @@ export default function HousingLCCPage() {
           <div className="px-4 sm:px-6">
             {/* Desktop Tabs */}
             <div className="hidden sm:block">
-              <Tabs value={tabValue} onValueChange={handleTabChange}>
+              <Tabs value={tabValue} onValueChange={changeTab}>
                 <TabsList className="h-auto w-full justify-start rounded-none border-0 bg-transparent p-0">
                   <TabsTrigger
                     value="dashboard"
@@ -628,25 +612,31 @@ export default function HousingLCCPage() {
                 </DropdownMenuTrigger>
                 <DropdownMenuContent className="w-56">
                   <DropdownMenuItem
-                    onSelect={() => handleTabChange("dashboard")}
+                    onSelect={() => changeTab("dashboard")}
                   >
                     <Home className="mr-2 h-4 w-4" />
                     ダッシュボード
                   </DropdownMenuItem>
-                  <DropdownMenuItem onSelect={() => handleTabChange("monthly")}>
+                  <DropdownMenuItem
+                    onSelect={() => changeTab("monthly")}
+                  >
                     <Calendar className="mr-2 h-4 w-4" />
                     月次
                   </DropdownMenuItem>
-                  <DropdownMenuItem onSelect={() => handleTabChange("housing")}>
+                  <DropdownMenuItem
+                    onSelect={() => changeTab("housing")}
+                  >
                     <Home className="mr-2 h-4 w-4" />
                     住宅LCC
                   </DropdownMenuItem>
-                  <DropdownMenuItem onSelect={() => handleTabChange("events")}>
+                  <DropdownMenuItem
+                    onSelect={() => changeTab("events")}
+                  >
                     <Calendar className="mr-2 h-4 w-4" />
                     イベント
                   </DropdownMenuItem>
                   <DropdownMenuItem
-                    onSelect={() => handleTabChange("versions")}
+                    onSelect={() => changeTab("versions")}
                   >
                     <History className="mr-2 h-4 w-4" />
                     見直し（改定）

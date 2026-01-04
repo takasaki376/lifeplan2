@@ -58,6 +58,8 @@ import {
   scenarioKeys,
 } from "@/lib/scenario";
 import type { ScenarioKey } from "@/lib/scenario";
+import { useScenarioNavigation } from "@/lib/hooks/useScenarioNavigation";
+import { useTabNavigation } from "@/lib/hooks/useTabNavigation";
 
 type DashboardState =
   | "FIRST_TIME"
@@ -100,6 +102,8 @@ export default function PlanDashboardPage() {
   const [loadError, setLoadError] = useState<string | null>(null);
   const [scenario, setScenario] = useState<ScenarioKey>(parsedScenario);
   const [selectedTab, setSelectedTab] = useState("dashboard");
+  const { changeScenario } = useScenarioNavigation();
+  const { changeTab } = useTabNavigation(planId);
 
   useEffect(() => {
     setScenario(parsedScenario);
@@ -166,30 +170,9 @@ export default function PlanDashboardPage() {
     return "READY";
   };
 
-  const handleTabChange = (value: string) => {
-    setSelectedTab(value);
-    const routes: Record<string, string> = {
-      dashboard: `/plans/${planId}`,
-      monthly: `/plans/${planId}/months`,
-      housing: `/plans/${planId}/housing`,
-      events: `/plans/${planId}/events`,
-      versions: `/plans/${planId}/versions`,
-    };
-    const next = routes[value];
-    if (next && value !== "dashboard") {
-      router.push(next);
-    }
-  };
 
-  const handleScenarioChange = (value: ScenarioKey) => {
-    if (value === scenario) return;
-    setScenario(value);
-    const nextParams = new URLSearchParams(searchParams.toString());
-    nextParams.set("scenario", value);
-    const query = nextParams.toString();
-    const nextUrl = query ? `${pathname}?${query}` : pathname;
-    void router.replace(nextUrl);
-  };
+
+
 
   useEffect(() => {
     let active = true;
@@ -362,7 +345,7 @@ export default function PlanDashboardPage() {
             <Tabs
               value={scenario}
               onValueChange={(value) =>
-                handleScenarioChange(value as ScenarioKey)
+                changeScenario(value as ScenarioKey, scenario)
               }
               className="w-full sm:w-auto"
             >
@@ -389,7 +372,7 @@ export default function PlanDashboardPage() {
         <div className="container mx-auto px-4 sm:px-6">
           {/* Desktop Tabs */}
           <div className="hidden sm:block">
-            <Tabs value={selectedTab} onValueChange={handleTabChange}>
+            <Tabs value={selectedTab} onValueChange={changeTab}>
               <TabsList className="h-auto w-full justify-start rounded-none border-0 bg-transparent p-0">
                 <TabsTrigger
                   value="dashboard"
@@ -446,23 +429,23 @@ export default function PlanDashboardPage() {
                 </Button>
               </DropdownMenuTrigger>
               <DropdownMenuContent className="w-56">
-                <DropdownMenuItem onSelect={() => handleTabChange("dashboard")}>
+                <DropdownMenuItem onSelect={() => changeTab("dashboard")}>
                   <Home className="mr-2 h-4 w-4" />
                   ダッシュボード
                 </DropdownMenuItem>
-                <DropdownMenuItem onSelect={() => handleTabChange("monthly")}>
+                <DropdownMenuItem onSelect={() => changeTab("monthly")}>
                   <Calendar className="mr-2 h-4 w-4" />
                   月次
                 </DropdownMenuItem>
-                <DropdownMenuItem onSelect={() => handleTabChange("housing")}>
+                <DropdownMenuItem onSelect={() => changeTab("housing")}>
                   <Home className="mr-2 h-4 w-4" />
                   住宅LCC
                 </DropdownMenuItem>
-                <DropdownMenuItem onSelect={() => handleTabChange("events")}>
+                <DropdownMenuItem onSelect={() => changeTab("events")}>
                   <Calendar className="mr-2 h-4 w-4" />
                   イベント
                 </DropdownMenuItem>
-                <DropdownMenuItem onSelect={() => handleTabChange("versions")}>
+                <DropdownMenuItem onSelect={() => changeTab("versions")}>
                   <History className="mr-2 h-4 w-4" />
                   見直し（改定）
                 </DropdownMenuItem>
