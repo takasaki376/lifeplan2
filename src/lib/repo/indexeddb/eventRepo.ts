@@ -120,6 +120,10 @@ export class IndexedDbEventRepository {
 
   async delete(eventId: Id, ctx?: RepoContext): Promise<void> {
     await withOptionalTx(ctx?.tx, STORES.lifeEvents, "readwrite", async (tx) => {
+      const existing = await txGet<LifeEvent>(tx, STORES.lifeEvents, eventId);
+      if (!existing) {
+        throw new RepoNotFoundError("LifeEvent", { eventId });
+      }
       await txDel(tx, STORES.lifeEvents, eventId);
     });
   }

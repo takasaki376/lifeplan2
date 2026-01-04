@@ -1,4 +1,4 @@
-import React from "react";
+﻿import React from "react";
 import {
   afterEach,
   beforeAll,
@@ -19,6 +19,7 @@ const planGetMock = vi.fn();
 const versionGetCurrentMock = vi.fn();
 const eventListByVersionMock = vi.fn();
 const eventDuplicateMock = vi.fn();
+const eventDeleteMock = vi.fn();
 const pushMock = vi.fn();
 const routerMock = {
   push: pushMock,
@@ -50,6 +51,7 @@ vi.mock("@/lib/repo/factory", () => ({
     event: {
       listByVersion: eventListByVersionMock,
       duplicate: eventDuplicateMock,
+      delete: eventDeleteMock,
     },
   }),
 }));
@@ -110,7 +112,7 @@ const makeEvent = (
   id,
   planVersionId,
   eventType: "education",
-  title: "イベントA",
+  title: "イベント",
   startYm: "2026-02",
   cadence: "monthly",
   amountYen: 40000,
@@ -167,6 +169,7 @@ describe("EventsPage", () => {
     versionGetCurrentMock.mockReset();
     eventListByVersionMock.mockReset();
     eventDuplicateMock.mockReset();
+    eventDeleteMock.mockReset();
     pushMock.mockReset();
     vi.mocked(toast.error).mockReset();
     vi.mocked(toast.success).mockReset();
@@ -378,7 +381,7 @@ describe("EventsPage", () => {
       makeEvent("ver-1", "event-1", { title: "複製対象" }),
     ]);
     eventDuplicateMock.mockResolvedValue(
-      makeEvent("ver-1", "dup-1", { title: "複製対象（コピー）" }),
+      makeEvent("ver-1", "dup-1", { title: "複製対象・コピー" }),
     );
 
     render(<EventsPage />);
@@ -425,5 +428,98 @@ describe("EventsPage", () => {
     );
     expect(toast.error).toHaveBeenCalledWith("イベントが見つかりません");
     expect(pushMock).not.toHaveBeenCalled();
+  });
+
+  it("deletes an event after confirmation", async () => {
+    eventListByVersionMock.mockResolvedValue([
+      makeEvent("ver-1", "event-1", { title: "削除対象A" }),
+      makeEvent("ver-1", "event-2", { title: "削除対象B" }),
+    ]);
+    eventDeleteMock.mockResolvedValue(undefined);
+
+    render(<EventsPage />);
+
+    await waitFor(() =>
+      expect(screen.getAllByText("削除対象A").length).toBeGreaterThan(0),
+    );
+
+    const user = userEvent.setup();
+    const menuButtons = screen.getAllByRole("button", { name: "メニュー" });
+    await user.click(menuButtons[0]);
+    await user.click(await screen.findByText("削除"));
+
+    expect(screen.getByText("イベントを削除しますか？")).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "削除" }));
+
+    await waitFor(() =>
+      expect(eventDeleteMock).toHaveBeenCalledWith("event-1"),
+    );
+    expect(toast.success).toHaveBeenCalledWith("削除しました");
+    expect(screen.queryAllByText("削除対象A")).toHaveLength(0);
+    expect(screen.getAllByText("削除対象B").length).toBeGreaterThan(0);
+  });
+
+  it("shows not-found toast when delete fails with missing event", async () => {
+    eventListByVersionMock.mockResolvedValue([
+      makeEvent("ver-1", "event-1", { title: "削除対象" }),
+    ]);
+    eventDeleteMock.mockRejectedValue(
+      new RepoNotFoundError("LifeEvent", { eventId: "event-1" }),
+    );
+
+    render(<EventsPage />);
+
+    await waitFor(() =>
+      expect(screen.getAllByText("削除対象").length).toBeGreaterThan(0),
+    );
+
+    const user = userEvent.setup();
+    const menuButtons = screen.getAllByRole("button", { name: "メニュー" });
+    await user.click(menuButtons[0]);
+    await user.click(await screen.findByText("削除"));
+
+    await user.click(screen.getByRole("button", { name: "削除" }));
+
+    await waitFor(() =>
+      expect(eventDeleteMock).toHaveBeenCalledWith("event-1"),
+    );
+    expect(toast.error).toHaveBeenCalledWith("イベントが見つかりません");
+    expect(screen.queryAllByText("削除対象")).toHaveLength(0);
+  });
+
+  it("disables delete while deleting to prevent double submit", async () => {
+    eventListByVersionMock.mockResolvedValue([
+      makeEvent("ver-1", "event-1", { title: "削除対象" }),
+    ]);
+    let resolveDelete: (() => void) | undefined;
+    eventDeleteMock.mockImplementation(
+      () =>
+        new Promise((resolve) => {
+          resolveDelete = resolve;
+        }),
+    );
+
+    render(<EventsPage />);
+
+    await waitFor(() =>
+      expect(screen.getAllByText("削除対象").length).toBeGreaterThan(0),
+    );
+
+    const user = userEvent.setup();
+    const menuButtons = screen.getAllByRole("button", { name: "メニュー" });
+    await user.click(menuButtons[0]);
+    await user.click(await screen.findByText("削除"));
+
+    const confirmButton = screen.getByRole("button", { name: "削除" });
+    await user.click(confirmButton);
+    await user.click(confirmButton);
+
+    expect(eventDeleteMock).toHaveBeenCalledTimes(1);
+
+    resolveDelete?.();
+
+    await waitFor(() =>
+      expect(toast.success).toHaveBeenCalledWith("削除しました"),
+    );
   });
 });

@@ -35,6 +35,16 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Separator } from "@/components/ui/separator";
 import { toast } from "sonner";
@@ -99,6 +109,8 @@ export default function EventsPage() {
   const [error, setError] = useState<string | null>(null);
   const [currentVersionMissing, setCurrentVersionMissing] = useState(false);
   const [duplicatingId, setDuplicatingId] = useState<string | null>(null);
+  const [confirmDelete, setConfirmDelete] = useState<LifeEvent | null>(null);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
 
   useEffect(() => {
     const load = async () => {
@@ -261,6 +273,30 @@ export default function EventsPage() {
       }
     } finally {
       setDuplicatingId(null);
+    }
+  };
+
+  const handleDelete = async () => {
+    if (!confirmDelete || deletingId) return;
+    setDeletingId(confirmDelete.id);
+    try {
+      await repos.event.delete(confirmDelete.id);
+      setEvents((prev) => prev.filter((event) => event.id !== confirmDelete.id));
+      toast.success("削除しました");
+      setConfirmDelete(null);
+    } catch (deleteError) {
+      console.error(deleteError);
+      if (deleteError instanceof RepoNotFoundError) {
+        setEvents((prev) =>
+          prev.filter((event) => event.id !== confirmDelete.id),
+        );
+        toast.error("イベントが見つかりません");
+        setConfirmDelete(null);
+      } else {
+        toast.error("削除に失敗しました");
+      }
+    } finally {
+      setDeletingId(null);
     }
   };
 
@@ -707,7 +743,13 @@ export default function EventsPage() {
                                             </DropdownMenuItem>
                                             <DropdownMenuItem
                                               className="text-destructive focus:text-destructive"
-                                              disabled
+                                              onSelect={() =>
+                                                setConfirmDelete(event)
+                                              }
+                                              disabled={
+                                                duplicatingId === event.id ||
+                                                deletingId === event.id
+                                              }
                                             >
                                               <Trash2 className="mr-2 h-4 w-4" />
                                               削除
@@ -794,10 +836,53 @@ export default function EventsPage() {
         </div>
         )}
       </main>
+
+      <AlertDialog
+        open={Boolean(confirmDelete)}
+        onOpenChange={(open) => {
+          if (!open && !deletingId) {
+            setConfirmDelete(null);
+          }
+        }}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>イベントを削除しますか？</AlertDialogTitle>
+            <AlertDialogDescription>
+              この操作は取り消せません。将来の見通しからも反映が消えます。
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          {confirmDelete && (
+            <div className="rounded-lg border p-3 text-sm space-y-1">
+              <div className="font-medium">
+                {getEventTitle(confirmDelete)}
+              </div>
+              <div className="text-muted-foreground">
+                {formatEventMonth(confirmDelete.startYm)}
+              </div>
+              <div className="font-semibold">
+                {confirmDelete.direction === "income" ? "収入" : "支出"} ・
+                {formatAmount(confirmDelete.amountYen)}
+              </div>
+            </div>
+          )}
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={Boolean(deletingId)}>
+              キャンセル
+            </AlertDialogCancel>
+            <AlertDialogAction
+              onClick={handleDelete}
+              disabled={Boolean(deletingId)}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              削除
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }
-
 
 
 
