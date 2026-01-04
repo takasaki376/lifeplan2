@@ -524,8 +524,7 @@ describe("PlanDashboardPage", () => {
     await user.click(screen.getByRole("tab", { name: "保守" }));
 
     await waitFor(() => expect(replaceMock).toHaveBeenCalled());
-    const calledArg =
-      replaceMock.mock.calls[0]?.[0] ?? replaceMock.mock.calls[0]?.[0];
+    const calledArg = replaceMock.mock.calls[0]?.[0];
     const normalizedArg = Array.isArray(calledArg) ? calledArg[0] : calledArg;
     expect(normalizedArg).toBe("/plans/plan-123?scenario=conservative");
   });
