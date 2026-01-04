@@ -838,7 +838,9 @@ export default function PlanDashboardPage() {
                       nextActions.map((item) => (
                         <div
                           key={item.key}
-                          className="flex items-center gap-3 rounded-lg border bg-card p-3"
+                          className={`flex items-center gap-3 rounded-lg border bg-card p-3 ${
+                            !item.done ? "hover:bg-muted/50" : ""
+                          }`}
                         >
                           <div
                             className={`flex h-5 w-5 items-center justify-center rounded-full border-2 ${
