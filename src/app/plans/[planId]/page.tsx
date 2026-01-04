@@ -292,6 +292,11 @@ export default function PlanDashboardPage() {
   const hasEvents = eventCount > 0;
   const showForecast = dashboardState === "READY";
   const showHousingSummary = hasHousingAssumptions && hasSelectedHousing;
+  const showEventFooter =
+    !eventVersionMissing &&
+    upcomingEvents.length > 0 &&
+    !eventError &&
+    !eventLoading;
   const currentMonthLabel = getCurrentMonthLabel();
   const lastUpdated = currentMonthly?.updatedAt
     ? formatDateShort(currentMonthly.updatedAt)
@@ -1031,7 +1036,7 @@ export default function PlanDashboardPage() {
                     </div>
                   )}
                 </CardContent>
-                {!eventVersionMissing && upcomingEvents.length > 0 && (
+                {showEventFooter && (
                   <CardFooter className="flex flex-col gap-2 sm:flex-row sm:items-center">
                     <Button
                       asChild
