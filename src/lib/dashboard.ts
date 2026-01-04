@@ -1,7 +1,6 @@
 import type {
   MonthlyRecord,
   HousingAssumptions,
-  LifeEvent,
   PlanVersion,
 } from "./domain/types";
 
@@ -36,14 +35,14 @@ export const computeNextActions = ({
 }: ComputeNextActionsArgs): NextAction[] => {
   const actions: NextAction[] = [];
 
-  // Item A: 今月を入力
+  // Item A: 今月の家計を入力
   const isMonthlyDone = currentMonthly !== null && currentMonthly !== undefined;
   actions.push({
     key: "monthly",
-    label: "今月を入力",
+    label: "今月の家計を入力",
     done: isMonthlyDone,
     href: `/plans/${planId}/months/current`,
-    cta: isMonthlyDone ? "今月を編集" : "今月を入力",
+    cta: isMonthlyDone ? "今月の家計を編集" : "今月の家計を入力",
   });
 
   // Item B: 住宅前提を設定
