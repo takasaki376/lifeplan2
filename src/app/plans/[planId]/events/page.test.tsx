@@ -11,11 +11,14 @@ import {
 import { cleanup, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import type { LifeEvent, Plan, PlanVersion } from "@/lib/domain/types";
+import { RepoNotFoundError } from "@/lib/repo/types";
+import { toast } from "sonner";
 import EventsPage from "./page";
 
 const planGetMock = vi.fn();
 const versionGetCurrentMock = vi.fn();
 const eventListByVersionMock = vi.fn();
+const eventDuplicateMock = vi.fn();
 const pushMock = vi.fn();
 const routerMock = {
   push: pushMock,
@@ -46,6 +49,7 @@ vi.mock("@/lib/repo/factory", () => ({
     },
     event: {
       listByVersion: eventListByVersionMock,
+      duplicate: eventDuplicateMock,
     },
   }),
 }));
@@ -162,7 +166,10 @@ describe("EventsPage", () => {
     planGetMock.mockReset();
     versionGetCurrentMock.mockReset();
     eventListByVersionMock.mockReset();
+    eventDuplicateMock.mockReset();
     pushMock.mockReset();
+    vi.mocked(toast.error).mockReset();
+    vi.mocked(toast.success).mockReset();
 
     planGetMock.mockResolvedValue(makePlan({ id: "plan-123", name: "Plan A" }));
     versionGetCurrentMock.mockResolvedValue(
@@ -364,5 +371,59 @@ describe("EventsPage", () => {
     expect(
       container.querySelector('a[href="/plans/plan-123/events/event-1/edit"]'),
     ).toBeTruthy();
+  });
+
+  it("duplicates an event from the menu and navigates to edit", async () => {
+    eventListByVersionMock.mockResolvedValue([
+      makeEvent("ver-1", "event-1", { title: "複製対象" }),
+    ]);
+    eventDuplicateMock.mockResolvedValue(
+      makeEvent("ver-1", "dup-1", { title: "複製対象（コピー）" }),
+    );
+
+    render(<EventsPage />);
+
+    await waitFor(() =>
+      expect(screen.getAllByText("複製対象").length).toBeGreaterThan(0),
+    );
+
+    const user = userEvent.setup();
+    const menuButtons = screen.getAllByRole("button", { name: "メニュー" });
+    await user.click(menuButtons[0]);
+    await user.click(await screen.findByText("複製"));
+
+    await waitFor(() =>
+      expect(eventDuplicateMock).toHaveBeenCalledWith("event-1"),
+    );
+    expect(toast.success).toHaveBeenCalledWith("イベントを複製しました");
+    expect(pushMock).toHaveBeenCalledWith(
+      "/plans/plan-123/events/dup-1/edit",
+    );
+  });
+
+  it("shows not-found toast when duplicate fails with missing event", async () => {
+    eventListByVersionMock.mockResolvedValue([
+      makeEvent("ver-1", "event-1", { title: "複製対象" }),
+    ]);
+    eventDuplicateMock.mockRejectedValue(
+      new RepoNotFoundError("LifeEvent", { eventId: "event-1" }),
+    );
+
+    render(<EventsPage />);
+
+    await waitFor(() =>
+      expect(screen.getAllByText("複製対象").length).toBeGreaterThan(0),
+    );
+
+    const user = userEvent.setup();
+    const menuButtons = screen.getAllByRole("button", { name: "メニュー" });
+    await user.click(menuButtons[0]);
+    await user.click(await screen.findByText("複製"));
+
+    await waitFor(() =>
+      expect(eventDuplicateMock).toHaveBeenCalledWith("event-1"),
+    );
+    expect(toast.error).toHaveBeenCalledWith("イベントが見つかりません");
+    expect(pushMock).not.toHaveBeenCalled();
   });
 });

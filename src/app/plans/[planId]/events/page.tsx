@@ -41,6 +41,7 @@ import { toast } from "sonner";
 import type { LifeEvent, Plan } from "@/lib/domain/types";
 import { formatYearMonth, formatYen, getCurrentYearMonth } from "@/lib/format";
 import { createRepositories } from "@/lib/repo/factory";
+import { RepoNotFoundError } from "@/lib/repo/types";
 
 type EventTypeKey =
   | "birth"
@@ -97,6 +98,7 @@ export default function EventsPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [currentVersionMissing, setCurrentVersionMissing] = useState(false);
+  const [duplicatingId, setDuplicatingId] = useState<string | null>(null);
 
   useEffect(() => {
     const load = async () => {
@@ -240,6 +242,25 @@ export default function EventsPage() {
     const next = routes[value];
     if (next) {
       router.push(next);
+    }
+  };
+
+  const handleDuplicate = async (eventId: string) => {
+    if (duplicatingId) return;
+    setDuplicatingId(eventId);
+    try {
+      const duplicated = await repos.event.duplicate(eventId);
+      toast.success("イベントを複製しました");
+      router.push(`/plans/${planId}/events/${duplicated.id}/edit`);
+    } catch (duplicateError) {
+      console.error(duplicateError);
+      if (duplicateError instanceof RepoNotFoundError) {
+        toast.error("イベントが見つかりません");
+      } else {
+        toast.error("複製に失敗しました");
+      }
+    } finally {
+      setDuplicatingId(null);
     }
   };
 
@@ -674,7 +695,12 @@ export default function EventsPage() {
                                               </Link>
                                             </DropdownMenuItem>
                                             <DropdownMenuItem
-                                              disabled
+                                              onSelect={() =>
+                                                void handleDuplicate(event.id)
+                                              }
+                                              disabled={
+                                                duplicatingId === event.id
+                                              }
                                             >
                                               <Copy className="mr-2 h-4 w-4" />
                                               複製
@@ -771,7 +797,6 @@ export default function EventsPage() {
     </div>
   );
 }
-
 
 
 

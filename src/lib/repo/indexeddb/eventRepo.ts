@@ -102,11 +102,16 @@ export class IndexedDbEventRepository {
         throw new RepoNotFoundError("LifeEvent", { eventId });
       }
       const now = nowIso();
+      const baseTitle = existing.title?.trim() ?? "";
+      const title = baseTitle ? `${baseTitle}（コピー）` : "（コピー）";
       const duplicated: LifeEvent = {
         ...existing,
         id: createId(),
         createdAt: now,
         updatedAt: now,
+        title,
+        durationMonths:
+          existing.cadence === "once" ? 1 : existing.durationMonths,
       };
       await txPut(tx, STORES.lifeEvents, duplicated);
       return duplicated;
