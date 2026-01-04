@@ -970,7 +970,7 @@ export default function PlanDashboardPage() {
                             key={event.id}
                             href={`/plans/${planId}/events/${event.id}/edit`}
                             className="block rounded-lg border bg-muted/30 p-3 transition-colors hover:bg-muted/50"
-                            aria-label={getEventTitle(event)}
+                            aria-label={`${getEventTitle(event)}を編集`}
                           >
                             <div className="flex items-start gap-3">
                               <Calendar className="mt-0.5 h-4 w-4 text-muted-foreground" />
