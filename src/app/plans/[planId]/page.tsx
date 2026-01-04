@@ -36,7 +36,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
-import { formatYearMonth, getCurrentYearMonth } from "@/lib/format";
+import { formatYearMonth, formatYen, getCurrentYearMonth } from "@/lib/format";
 import type {
   HousingAssumptions,
   LifeEvent,
@@ -44,7 +44,9 @@ import type {
   Plan,
   PlanVersion,
 } from "@/lib/domain/types";
+import type { EventTypeKey } from "@/lib/domain/eventTypes";
 import { createRepositories } from "@/lib/repo/factory";
+import { EVENT_TYPE_LABELS } from "@/lib/domain/eventTypes";
 
 type DashboardState =
   | "FIRST_TIME"
@@ -72,8 +74,12 @@ export default function PlanDashboardPage() {
   const [housingAssumptions, setHousingAssumptions] = useState<
     HousingAssumptions[]
   >([]);
-  const [recentEvents, setRecentEvents] = useState<LifeEvent[]>([]);
+  const [upcomingEvents, setUpcomingEvents] = useState<LifeEvent[]>([]);
+  const [upcomingEventCount, setUpcomingEventCount] = useState(0);
   const [eventCount, setEventCount] = useState(0);
+  const [eventError, setEventError] = useState<string | null>(null);
+  const [eventLoading, setEventLoading] = useState(false);
+  const [eventVersionMissing, setEventVersionMissing] = useState(false);
   const [dashboardState, setDashboardState] = useState<DashboardState>("READY");
   const [isLoading, setIsLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
@@ -95,6 +101,27 @@ export default function PlanDashboardPage() {
   const formatCurrencyMaybe = (amount?: number) => {
     if (amount === null || amount === undefined) return "-";
     return formatCurrency(amount);
+  };
+
+  const getEventTitle = (event: LifeEvent) => {
+    const title = event.title?.trim();
+    if (title) return title;
+    return (
+      EVENT_TYPE_LABELS[event.eventType as EventTypeKey] ?? event.eventType
+    );
+  };
+
+  const formatEventAmount = (amount?: number) => {
+    if (!Number.isFinite(amount)) {
+      return "未設定";
+    }
+    if (amount === 0) {
+      return "0円";
+    }
+    return formatYen(amount, {
+      showDashForEmpty: false,
+      sign: "never",
+    });
   };
 
   const getCurrentMonthLabel = () => {
@@ -124,7 +151,7 @@ export default function PlanDashboardPage() {
 
   const getScenarioLabel = (s: typeof scenario) => {
     const labels = {
-      conservative: "保守的",
+      conservative: "保守",
       standard: "標準",
       optimistic: "楽観",
     };
@@ -155,8 +182,12 @@ export default function PlanDashboardPage() {
       setCurrentVersion(null);
       setCurrentMonthly(null);
       setHousingAssumptions([]);
-      setRecentEvents([]);
+      setUpcomingEvents([]);
+      setUpcomingEventCount(0);
       setEventCount(0);
+      setEventError(null);
+      setEventLoading(true);
+      setEventVersionMissing(false);
       setDashboardState("READY");
       try {
         const [planData, versionData] = await Promise.all([
@@ -170,28 +201,52 @@ export default function PlanDashboardPage() {
           return;
         }
 
+        if (!active) return;
+        setPlan(planData);
+
         if (!versionData) {
+          setCurrentVersion(null);
+          setEventVersionMissing(true);
+          setEventLoading(false);
+          const monthly = await repos.monthly.getByYm(planId, currentYm);
           if (!active) return;
-          setLoadError("現行バージョンが見つかりません");
+          setCurrentMonthly(monthly ?? null);
+          setHousingAssumptions([]);
+          setDashboardState(resolveDashboardState(monthly, [], 0));
+          setIsLoading(false);
           return;
         }
 
-        if (!active) return;
-        setPlan(planData);
         setCurrentVersion(versionData);
 
-        const [monthly, housing, events] = await Promise.all([
+        const [monthly, housing] = await Promise.all([
           repos.monthly.getByYm(planId, currentYm),
           repos.housing.listByVersion(versionData.id),
-          repos.event.listByVersion(versionData.id, { scope: "all" }),
         ]);
+
+        let events: LifeEvent[] = [];
+        try {
+          events = await repos.event.listByVersion(versionData.id, {
+            scope: "all",
+          });
+          setEventError(null);
+        } catch (error) {
+          console.error(error);
+          if (!active) return;
+          setEventError("イベントの取得に失敗しました");
+        } finally {
+          setEventLoading(false);
+          if (!active) return;
+        }
 
         if (!active) return;
         setCurrentMonthly(monthly ?? null);
         setHousingAssumptions(housing);
-        const upcoming = events.filter((event) => event.startYm >= currentYm);
-        const previewEvents = (upcoming.length ? upcoming : events).slice(0, 3);
-        setRecentEvents(previewEvents);
+        const upcoming = events
+          .filter((event) => event.startYm >= currentYm)
+          .sort((a, b) => a.startYm.localeCompare(b.startYm));
+        setUpcomingEventCount(upcoming.length);
+        setUpcomingEvents(upcoming.slice(0, 3));
         setEventCount(events.length);
         setDashboardState(
           resolveDashboardState(monthly, housing, events.length)
@@ -220,6 +275,11 @@ export default function PlanDashboardPage() {
   const hasEvents = eventCount > 0;
   const showForecast = dashboardState === "READY";
   const showHousingSummary = hasHousingAssumptions && hasSelectedHousing;
+  const showEventFooter =
+    !eventVersionMissing &&
+    upcomingEvents.length > 0 &&
+    !eventError &&
+    !eventLoading;
   const currentMonthLabel = getCurrentMonthLabel();
   const lastUpdated = currentMonthly?.updatedAt
     ? formatDateShort(currentMonthly.updatedAt)
@@ -839,60 +899,151 @@ export default function PlanDashboardPage() {
               {/* 5) LIFE EVENTS CARD */}
               <Card className="shadow-sm">
                 <CardHeader>
-                  <CardTitle className="text-lg">
-                    直近のライフイベント
-                  </CardTitle>
+                  <div className="flex items-center justify-between gap-2">
+                    <CardTitle className="text-lg">
+                      今後のライフイベント
+                    </CardTitle>
+                    <Button
+                      asChild
+                      variant="ghost"
+                      size="sm"
+                      className="h-auto px-2"
+                    >
+                      <Link href={`/plans/${planId}/events`}>イベント一覧</Link>
+                    </Button>
+                  </div>
                 </CardHeader>
                 <CardContent>
-                  {recentEvents.length > 0 ? (
+                  {eventVersionMissing ? (
+                    <div className="rounded-lg border-2 border-dashed bg-muted/30 p-6 text-center">
+                      <Calendar className="mx-auto h-8 w-8 text-muted-foreground" />
+                      <p className="mt-3 text-sm text-muted-foreground">
+                        現行バージョンがありません
+                      </p>
+                      <Button
+                        asChild
+                        size="sm"
+                        variant="outline"
+                        className="mt-4"
+                      >
+                        <Link href={`/plans/${planId}/versions/new`}>
+                          改定を作成
+                        </Link>
+                      </Button>
+                    </div>
+                  ) : eventLoading ? (
+                    <div className="rounded-lg border bg-muted/30 p-6 text-center text-sm text-muted-foreground">
+                      読み込み中...
+                    </div>
+                  ) : eventError ? (
+                    <Alert variant="destructive">
+                      <AlertTitle>読み込みに失敗しました</AlertTitle>
+                      <AlertDescription>{eventError}</AlertDescription>
+                    </Alert>
+                  ) : upcomingEvents.length > 0 ? (
                     <div className="space-y-3">
-                      {recentEvents.map((event) => (
-                        <div
-                          key={event.id}
-                          className="flex items-start gap-3 rounded-lg border bg-muted/30 p-3"
-                        >
-                          <Calendar className="mt-0.5 h-4 w-4 text-muted-foreground" />
-                          <div className="flex-1 space-y-1">
-                            <div className="flex items-start justify-between gap-2">
-                              <p className="text-sm font-medium leading-tight">
-                                {event.title}
-                              </p>
-                              <Badge variant="outline" className="text-xs">
-                                {event.cadence === "monthly" ? "毎月" : "単発"}
-                              </Badge>
+                      {upcomingEvents.map((event) => {
+                        const eventTypeLabel =
+                          EVENT_TYPE_LABELS[event.eventType as EventTypeKey] ??
+                          event.eventType;
+                        const amountText = formatEventAmount(event.amountYen);
+                        const hasAmount = amountText !== "未設定";
+                        return (
+                          <Link
+                            key={event.id}
+                            href={`/plans/${planId}/events/${event.id}/edit`}
+                            className="block rounded-lg border bg-muted/30 p-3 transition-colors hover:bg-muted/50"
+                            aria-label={`${getEventTitle(event)}を編集`}
+                          >
+                            <div className="flex items-start gap-3">
+                              <Calendar className="mt-0.5 h-4 w-4 text-muted-foreground" />
+                              <div className="flex-1 space-y-1">
+                                <div className="flex items-start justify-between gap-2">
+                                  <p className="text-sm font-medium leading-tight">
+                                    {getEventTitle(event)}
+                                  </p>
+                                  <Badge variant="outline" className="text-xs">
+                                    {event.cadence === "monthly"
+                                      ? "毎月"
+                                      : "単発"}
+                                  </Badge>
+                                </div>
+                                <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+                                  <span>{formatYearMonth(event.startYm)}</span>
+                                  <Badge
+                                    variant="secondary"
+                                    className={
+                                      event.direction === "income"
+                                        ? "bg-emerald-100 text-emerald-800"
+                                        : "bg-rose-100 text-rose-800"
+                                    }
+                                  >
+                                    {event.direction === "income"
+                                      ? "収入"
+                                      : "支出"}
+                                  </Badge>
+                                  <Badge variant="outline">
+                                    {eventTypeLabel}
+                                  </Badge>
+                                </div>
+                                <p className="text-sm font-semibold text-foreground">
+                                  {amountText}
+                                  {hasAmount &&
+                                    event.cadence === "monthly" &&
+                                    " /月"}
+                                  {hasAmount &&
+                                    event.cadence === "monthly" &&
+                                    event.durationMonths && (
+                                      <>（{event.durationMonths}ヶ月）</>
+                                    )}
+                                </p>
+                              </div>
                             </div>
-                            <p className="text-xs text-muted-foreground">
-                              {formatYearMonth(event.startYm)}
-                            </p>
-                            <p className="text-sm font-semibold text-foreground">
-                              {formatCurrency(event.amountYen)}
-                            </p>
-                          </div>
-                        </div>
-                      ))}
+                          </Link>
+                        );
+                      })}
                     </div>
                   ) : (
                     <div className="rounded-lg border-2 border-dashed bg-muted/30 p-8 text-center">
                       <Calendar className="mx-auto h-8 w-8 text-muted-foreground" />
                       <p className="mt-3 text-sm text-muted-foreground">
-                        イベントがまだありません
+                        {eventCount > 0
+                          ? "今後のイベントがありません"
+                          : "イベントがまだありません"}
                       </p>
+                      <Button asChild size="sm" className="mt-4">
+                        <Link href={`/plans/${planId}/events/new`}>
+                          イベントを追加
+                        </Link>
+                      </Button>
                     </div>
                   )}
                 </CardContent>
-                <CardFooter>
-                  <Button
-                    asChild
-                    variant="outline"
-                    size="sm"
-                    className="w-full bg-transparent"
-                  >
-                    <Link href={`/plans/${planId}/events/new`}>
-                      <Plus className="mr-2 h-4 w-4" />
-                      イベントを追加
-                    </Link>
-                  </Button>
-                </CardFooter>
+                {showEventFooter && (
+                  <CardFooter className="flex flex-col gap-2 sm:flex-row sm:items-center">
+                    <Button
+                      asChild
+                      variant="outline"
+                      size="sm"
+                      className="w-full bg-transparent sm:w-auto"
+                    >
+                      <Link href={`/plans/${planId}/events/new`}>
+                        <Plus className="mr-2 h-4 w-4" />
+                        イベントを追加
+                      </Link>
+                    </Button>
+                    {upcomingEventCount > 3 && (
+                      <Button
+                        asChild
+                        variant="ghost"
+                        size="sm"
+                        className="w-full sm:w-auto"
+                      >
+                        <Link href={`/plans/${planId}/events`}>もっと見る</Link>
+                      </Button>
+                    )}
+                  </CardFooter>
+                )}
               </Card>
 
               {/* 6) VERSIONING / REVIEW CARD */}

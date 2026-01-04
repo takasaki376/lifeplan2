@@ -34,26 +34,9 @@ import {
   validateLifeEventDraft,
 } from "@/lib/validation/lifeEvent";
 import type { PlanVersion, YearMonth } from "@/lib/domain/types";
+import type { EventTypeKey } from "@/lib/domain/eventTypes";
 import { createRepositories } from "@/lib/repo/factory";
-
-type EventTypeKey =
-  | "birth"
-  | "education"
-  | "job_change"
-  | "retirement"
-  | "care"
-  | "housing"
-  | "other";
-
-const EVENT_TYPE_LABELS: Record<EventTypeKey, string> = {
-  birth: "出産",
-  education: "教育",
-  job_change: "転職",
-  retirement: "退職",
-  care: "介護",
-  housing: "住宅",
-  other: "その他",
-};
+import { EVENT_TYPE_LABELS } from "@/lib/domain/eventTypes";
 
 export default function EventCreatePage({
   params,
