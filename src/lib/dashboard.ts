@@ -5,7 +5,7 @@ import type {
   PlanVersion,
 } from "./domain/types";
 
-const REQUIRED_HOUSING_TYPES = 4;
+export const REQUIRED_HOUSING_TYPES = 4;
 
 export interface NextAction {
   key: string;
@@ -47,7 +47,8 @@ export const computeNextActions = ({
   });
 
   // Item B: 住宅前提を設定
-  const hasHousingAssumptions = housingAssumptions.length >= REQUIRED_HOUSING_TYPES;
+  const hasHousingAssumptions =
+    housingAssumptions.length >= REQUIRED_HOUSING_TYPES;
   actions.push({
     key: "housing-assumptions",
     label: "住宅前提を設定",
@@ -57,15 +58,16 @@ export const computeNextActions = ({
   });
 
   // Item C: 住宅タイプを選択
-  const hasSelectedHousing = hasHousingAssumptions && housingAssumptions.some((item) => item.isSelected);
+  const hasSelectedHousing =
+    hasHousingAssumptions && housingAssumptions.some((item) => item.isSelected);
   if (hasHousingAssumptions) {
-      actions.push({
-        key: "housing-selection",
-        label: "住宅タイプを選択",
-        done: hasSelectedHousing,
-        href: `/plans/${planId}/housing`,
-        cta: "住宅LCC比較へ",
-      });
+    actions.push({
+      key: "housing-selection",
+      label: "住宅タイプを選択",
+      done: hasSelectedHousing,
+      href: `/plans/${planId}/housing`,
+      cta: "住宅LCC比較へ",
+    });
   }
 
   // Item D: イベントを追加

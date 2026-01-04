@@ -60,7 +60,7 @@ import {
 import type { ScenarioKey } from "@/lib/scenario";
 import { useScenarioNavigation } from "@/lib/hooks/useScenarioNavigation";
 import { useTabNavigation } from "@/lib/hooks/useTabNavigation";
-import { computeNextActions } from "@/lib/dashboard";
+import { computeNextActions, REQUIRED_HOUSING_TYPES } from "@/lib/dashboard";
 
 type DashboardState =
   | "FIRST_TIME"
@@ -68,8 +68,6 @@ type DashboardState =
   | "NEEDS_SELECTION"
   | "NEEDS_EVENTS"
   | "READY";
-
-const REQUIRED_HOUSING_TYPES = 4;
 
 export default function PlanDashboardPage() {
   const params = useParams();
