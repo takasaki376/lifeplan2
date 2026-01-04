@@ -29,10 +29,15 @@ vi.mock("next/link", () => ({
   default: ({
     href,
     children,
+    ...rest
   }: {
     href: string;
     children: React.ReactNode;
-  }) => <a href={href}>{children}</a>,
+  } & React.AnchorHTMLAttributes<HTMLAnchorElement>) => (
+    <a href={href} {...rest}>
+      {children}
+    </a>
+  ),
 }));
 
 vi.mock("@/lib/repo/factory", () => ({
@@ -348,6 +353,15 @@ describe("PlanDashboardPage", () => {
     expect(screen.getAllByText("イベントB").length).toBeGreaterThan(0);
     expect(screen.getAllByText("イベントC").length).toBeGreaterThan(0);
     expect(screen.queryByText("イベントD")).not.toBeInTheDocument();
+    const eventLinks = screen.getAllByRole("link", {
+      name: /イベント(?:A|B|C)/,
+    }).filter((link) => link.getAttribute("aria-label"));
+    expect(
+      eventLinks.map((link) =>
+        link.getAttribute("aria-label") ||
+        link.textContent?.trim().replace(/\s+/g, " "),
+      ),
+    ).toEqual(["イベントA", "イベントB", "イベントC"]);
     expect(screen.getByRole("link", { name: "もっと見る" })).toHaveAttribute(
       "href",
       "/plans/plan-123/events",
