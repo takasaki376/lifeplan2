@@ -392,6 +392,18 @@ describe("PlanDashboardPage", () => {
     );
   });
 
+  it("falls back to event type label when title is empty", async () => {
+    eventListByVersionMock.mockResolvedValue([
+      makeEvent("ver-1", "event-blank", { title: null }),
+    ]);
+
+    render(<PlanDashboardPage />);
+
+    await waitFor(() =>
+      expect(screen.getByRole("link", { name: "教育" })).toBeInTheDocument(),
+    );
+  });
+
   it("links each upcoming event row to edit", async () => {
     eventListByVersionMock.mockResolvedValue([
       makeEvent("ver-1", "event-1", { title: "編集対象" }),
