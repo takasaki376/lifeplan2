@@ -336,7 +336,7 @@ export default function PlanDashboardPage() {
             <Tabs
               value={parsedScenario}
               onValueChange={(value) =>
-                changeScenario(value as ScenarioKey, scenario)
+                changeScenario(value as ScenarioKey, parsedScenario)
               }
               className="w-full sm:w-auto"
             >
