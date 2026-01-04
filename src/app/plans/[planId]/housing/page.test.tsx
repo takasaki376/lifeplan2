@@ -1,5 +1,5 @@
 import React from "react";
-import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { cleanup, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import HousingLCCPage from "./page";
@@ -63,7 +63,9 @@ describe("HousingLCCPage", () => {
           dispatchEvent: () => false,
         }) as MediaQueryList;
     }
+  });
 
+  beforeEach(() => {
     planGetMock.mockResolvedValue({
       id: "plan-123",
       name: "Test Plan",
