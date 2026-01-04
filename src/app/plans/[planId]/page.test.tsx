@@ -1,5 +1,13 @@
 ﻿import React from "react";
-import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
+import {
+  afterEach,
+  beforeAll,
+  beforeEach,
+  describe,
+  expect,
+  it,
+  vi,
+} from "vitest";
 import { cleanup, render, screen, waitFor } from "@testing-library/react";
 import type {
   HousingAssumptions,
@@ -71,13 +79,8 @@ vi.mock("@/lib/format", () => ({
     const [year, month] = ym.split("-");
     return `${year}年${Number(month)}月`;
   },
-  formatYen: (
-    value: number | null | undefined,
-    options?: FormatYenOptions,
-  ) => {
-    const showDash =
-      options?.showDashForEmpty ??
-      true;
+  formatYen: (value: number | null | undefined, options?: FormatYenOptions) => {
+    const showDash = options?.showDashForEmpty ?? true;
     if (value === null || value === undefined) {
       return showDash ? "-" : "";
     }
@@ -110,7 +113,8 @@ const makePlan = (partial: Partial<Plan> & Pick<Plan, "id" | "name">): Plan => {
 };
 
 const makeVersion = (
-  partial: Partial<PlanVersion> & Pick<PlanVersion, "id" | "planId" | "versionNo">,
+  partial: Partial<PlanVersion> &
+    Pick<PlanVersion, "id" | "planId" | "versionNo">
 ): PlanVersion => ({
   id: partial.id,
   planId: partial.planId,
@@ -140,7 +144,7 @@ const makeMonthly = (planId: string): MonthlyRecord => ({
 const makeHousing = (
   planVersionId: string,
   housingType: HousingAssumptions["housingType"],
-  isSelected: boolean,
+  isSelected: boolean
 ): HousingAssumptions => ({
   id: `${planVersionId}-${housingType}`,
   planVersionId,
@@ -153,7 +157,7 @@ const makeHousing = (
 const makeEvent = (
   planVersionId: string,
   id: string,
-  overrides: Partial<LifeEvent> = {},
+  overrides: Partial<LifeEvent> = {}
 ): LifeEvent => ({
   id,
   planVersionId,
@@ -192,7 +196,7 @@ describe("PlanDashboardPage", () => {
           addEventListener: () => {},
           removeEventListener: () => {},
           dispatchEvent: () => false,
-        }) as MediaQueryList;
+        } as MediaQueryList);
     }
   });
 
@@ -210,7 +214,7 @@ describe("PlanDashboardPage", () => {
 
     planGetMock.mockResolvedValue(makePlan({ id: "plan-123", name: "Plan A" }));
     versionGetCurrentMock.mockResolvedValue(
-      makeVersion({ id: "ver-1", planId: "plan-123", versionNo: 1 }),
+      makeVersion({ id: "ver-1", planId: "plan-123", versionNo: 1 })
     );
     monthlyGetByYmMock.mockResolvedValue(makeMonthly("plan-123"));
     housingListByVersionMock.mockResolvedValue([]);
@@ -222,7 +226,7 @@ describe("PlanDashboardPage", () => {
     const { container } = render(<PlanDashboardPage />);
 
     await waitFor(() =>
-      expect(screen.getByText("プランが見つかりません")).toBeInTheDocument(),
+      expect(screen.getByText("プランが見つかりません")).toBeInTheDocument()
     );
 
     expect(container.querySelector('a[href="/"]')).toBeTruthy();
@@ -242,9 +246,9 @@ describe("PlanDashboardPage", () => {
     const { container } = render(<PlanDashboardPage />);
 
     await waitFor(() =>
-      expect(screen.getAllByText("読み込みに失敗しました").length).toBeGreaterThan(
-        0,
-      ),
+      expect(
+        screen.getAllByText("読み込みに失敗しました").length
+      ).toBeGreaterThan(0)
     );
     expect(container.querySelector('a[href="/"]')).toBeTruthy();
   });
@@ -255,10 +259,8 @@ describe("PlanDashboardPage", () => {
 
     await waitFor(() =>
       expect(
-        container.querySelector(
-          'a[href="/plans/plan-123/months/current"]',
-        ),
-      ).toBeTruthy(),
+        container.querySelector('a[href="/plans/plan-123/months/current"]')
+      ).toBeTruthy()
     );
   });
 
@@ -271,10 +273,10 @@ describe("PlanDashboardPage", () => {
     const { container } = render(<PlanDashboardPage />);
 
     await waitFor(() =>
-      expect(screen.getByText("入力済み")).toBeInTheDocument(),
+      expect(screen.getByText("入力済み")).toBeInTheDocument()
     );
     expect(
-      container.querySelector('a[href="/plans/plan-123/months/current"]'),
+      container.querySelector('a[href="/plans/plan-123/months/current"]')
     ).toBeTruthy();
   });
 
@@ -284,13 +286,11 @@ describe("PlanDashboardPage", () => {
 
     await waitFor(() =>
       expect(
-        container.querySelector(
-          'a[href="/plans/plan-123/housing/assumptions"]',
-        ),
-      ).toBeTruthy(),
+        container.querySelector('a[href="/plans/plan-123/housing/assumptions"]')
+      ).toBeTruthy()
     );
     expect(
-      container.querySelector('a[href="/plans/plan-123/housing"]'),
+      container.querySelector('a[href="/plans/plan-123/housing"]')
     ).toBeTruthy();
   });
 
@@ -304,10 +304,8 @@ describe("PlanDashboardPage", () => {
 
     await waitFor(() =>
       expect(
-        container.querySelector(
-          'a[href="/plans/plan-123/housing/assumptions"]',
-        ),
-      ).toBeTruthy(),
+        container.querySelector('a[href="/plans/plan-123/housing/assumptions"]')
+      ).toBeTruthy()
     );
   });
 
@@ -322,8 +320,8 @@ describe("PlanDashboardPage", () => {
 
     await waitFor(() =>
       expect(
-        container.querySelector('a[href="/plans/plan-123/housing"]'),
-      ).toBeTruthy(),
+        container.querySelector('a[href="/plans/plan-123/housing"]')
+      ).toBeTruthy()
     );
   });
 
@@ -339,13 +337,13 @@ describe("PlanDashboardPage", () => {
     render(<PlanDashboardPage />);
 
     await waitFor(() =>
-      expect(screen.getByText("イベントがまだありません")).toBeInTheDocument(),
+      expect(screen.getByText("イベントがまだありません")).toBeInTheDocument()
     );
     const eventLinks = screen.getAllByRole("link", { name: "イベントを追加" });
     expect(
       eventLinks.some(
-        (link) => link.getAttribute("href") === "/plans/plan-123/events/new",
-      ),
+        (link) => link.getAttribute("href") === "/plans/plan-123/events/new"
+      )
     ).toBe(true);
   });
 
@@ -357,7 +355,7 @@ describe("PlanDashboardPage", () => {
     render(<PlanDashboardPage />);
 
     await waitFor(() =>
-      expect(screen.getByText("今後のイベントがありません")).toBeInTheDocument(),
+      expect(screen.getByText("今後のイベントがありません")).toBeInTheDocument()
     );
   });
 
@@ -372,27 +370,26 @@ describe("PlanDashboardPage", () => {
     render(<PlanDashboardPage />);
 
     await waitFor(() =>
-      expect(screen.getAllByText("イベントA").length).toBeGreaterThan(0),
+      expect(screen.getAllByText("イベントA").length).toBeGreaterThan(0)
     );
     expect(screen.getAllByText("イベントB").length).toBeGreaterThan(0);
     expect(screen.getAllByText("イベントC").length).toBeGreaterThan(0);
     expect(screen.queryByText("イベントD")).not.toBeInTheDocument();
-    const eventLinks = screen.getAllByRole("link", {
-      name: /イベント(?:A|B|C)/,
-    }).filter((link) => link.getAttribute("aria-label"));
+    const eventLinks = screen
+      .getAllByRole("link", {
+        name: /イベント(?:A|B|C)/,
+      })
+      .filter((link) => link.getAttribute("aria-label"));
     expect(
-      eventLinks.map((link) =>
-        link.getAttribute("aria-label") ||
-        link.textContent?.trim().replace(/\s+/g, " "),
-      ),
-    ).toEqual([
-      "イベントAを編集",
-      "イベントBを編集",
-      "イベントCを編集",
-    ]);
+      eventLinks.map(
+        (link) =>
+          link.getAttribute("aria-label") ||
+          link.textContent?.trim().replace(/\s+/g, " ")
+      )
+    ).toEqual(["イベントAを編集", "イベントBを編集", "イベントCを編集"]);
     expect(screen.getByRole("link", { name: "もっと見る" })).toHaveAttribute(
       "href",
-      "/plans/plan-123/events",
+      "/plans/plan-123/events"
     );
   });
 
@@ -401,7 +398,7 @@ describe("PlanDashboardPage", () => {
       makeEvent("ver-1", `event-footer-${idx + 1}`, {
         title: `Footer Event ${idx + 1}`,
         startYm: `2026-${(idx + 2).toString().padStart(2, "0")}`,
-      }),
+      })
     );
 
   it.each([1, 2, 3])(
@@ -412,24 +409,26 @@ describe("PlanDashboardPage", () => {
       render(<PlanDashboardPage />);
 
       await waitFor(() =>
-        expect(screen.getByText("Footer Event 1")).toBeInTheDocument(),
+        expect(screen.getByText("Footer Event 1")).toBeInTheDocument()
       );
-      expect(screen.getByRole("link", { name: "イベントを追加" })).toBeInTheDocument();
-      expect(screen.queryByRole("link", { name: "もっと見る" })).not.toBeInTheDocument();
-    },
+      expect(
+        screen.getByRole("link", { name: "イベントを追加" })
+      ).toBeInTheDocument();
+      expect(
+        screen.queryByRole("link", { name: "もっと見る" })
+      ).not.toBeInTheDocument();
+    }
   );
 
   it("falls back to event type label when title is empty", async () => {
     eventListByVersionMock.mockResolvedValue([
-      makeEvent("ver-1", "event-blank", { title: null }),
+      makeEvent("ver-1", "event-blank", { title: "" }),
     ]);
 
     render(<PlanDashboardPage />);
 
     await waitFor(() =>
-      expect(
-        screen.getByRole("link", { name: /教育/ }),
-      ).toBeInTheDocument(),
+      expect(screen.getByRole("link", { name: /教育/ })).toBeInTheDocument()
     );
   });
 
@@ -441,21 +440,21 @@ describe("PlanDashboardPage", () => {
     render(<PlanDashboardPage />);
 
     await waitFor(() =>
-      expect(screen.getAllByText("編集対象").length).toBeGreaterThan(0),
+      expect(screen.getAllByText("編集対象").length).toBeGreaterThan(0)
     );
-    expect(
-      screen.getByRole("link", { name: /編集対象/ }),
-    ).toHaveAttribute("href", "/plans/plan-123/events/event-1/edit");
+    expect(screen.getByRole("link", { name: /編集対象/ })).toHaveAttribute(
+      "href",
+      "/plans/plan-123/events/event-1/edit"
+    );
   });
 
   it("shows the events list link in the header", async () => {
     render(<PlanDashboardPage />);
 
     await waitFor(() =>
-      expect(screen.getByRole("link", { name: "イベント一覧" })).toHaveAttribute(
-        "href",
-        "/plans/plan-123/events",
-      ),
+      expect(
+        screen.getByRole("link", { name: "イベント一覧" })
+      ).toHaveAttribute("href", "/plans/plan-123/events")
     );
   });
 
@@ -465,11 +464,11 @@ describe("PlanDashboardPage", () => {
     render(<PlanDashboardPage />);
 
     await waitFor(() =>
-      expect(screen.getByText("現行バージョンがありません")).toBeInTheDocument(),
+      expect(screen.getByText("現行バージョンがありません")).toBeInTheDocument()
     );
     expect(screen.getByRole("link", { name: "改定を作成" })).toHaveAttribute(
       "href",
-      "/plans/plan-123/versions/new",
+      "/plans/plan-123/versions/new"
     );
   });
 
@@ -479,8 +478,9 @@ describe("PlanDashboardPage", () => {
     render(<PlanDashboardPage />);
 
     await waitFor(() =>
-      expect(screen.getByText("イベントの取得に失敗しました")).toBeInTheDocument(),
+      expect(
+        screen.getByText("イベントの取得に失敗しました")
+      ).toBeInTheDocument()
     );
   });
 });
-
