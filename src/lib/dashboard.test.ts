@@ -195,35 +195,8 @@ describe("computeNextActions", () => {
     it("should mark revision memo as done when changeNote exists", () => {
       const currentVersion = createPlanVersion({ changeNote: "Some revision note" });
 
-      // Create a scenario where we have exactly 3 actions total (or revision-memo is in top 3)
-      // Minimum actions: monthly, housing-assumptions, events (no housing-selection without enough assumptions)
-      // With currentVersion, we add revision-memo = 4 total
-      // To ensure revision-memo in top 3, make it incomplete (not done) which means NO changeNote
-      // But the test requires changeNote to exist (done = true)
-      
-      // Alternative: Test a scenario where revision-memo is guaranteed to appear
-      // If we have no housingAssumptions (so no housing-selection), we have only 3 actions before revision-memo
-      // monthly, housing-assumptions, events, revision-memo = 4 actions
-      // But limiting to 3 means one gets cut
-      
-      // Best approach: Make revision-memo the ONLY action by completing everything else
-      // and ensuring it's incomplete (so it appears first)
-      // But we want to test when it's DONE, not incomplete
-      
-      // Solution: Create scenario with 2 incomplete actions + revision-memo (done)
-      // monthly (not done), events (not done), revision-memo (done) = 3 actions
-      // But we always have housing-assumptions too!
-      
-      // Actually: Don't provide housing assumptions at all - use less than required
-      // Result: monthly, housing-assumptions, events, revision-memo
-      // If monthly and housing-assumptions are done, and events is done, revision-memo (done) will be in result
-      // But incomplete actions come first, so if any are incomplete, revision-memo might be cut
-      
-      // Final solution: Test with NO currentVersion first to establish baseline, then WITH currentVersion
-      // and verify that revision-memo appears with the right done status when it fits in the limit
-      
-      // Simplest: Just test that IF revision-memo appears, it has the correct done flag
-      // This avoids the complexity of guaranteeing it's in the top 3
+      // Due to the 3-item limit, revision-memo may not always appear in results
+      // This test verifies that IF it appears, it has the correct done flag
       const result = computeNextActions({
         currentMonthly: createMonthlyRecord(),
         housingAssumptions: [
@@ -238,14 +211,9 @@ describe("computeNextActions", () => {
       });
 
       const revisionAction = result.find((a) => a.key === "revision-memo");
-      // Due to 3-item limit, revision-memo might not appear
-      // But if it does appear, it must have done=true
       if (revisionAction) {
         expect(revisionAction.done).toBe(true);
       }
-      // Also verify that our test setup would create the action (it just might be cut by the limit)
-      // We can't easily test this without modifying the function, so we'll just trust the logic
-      // The "should include revision memo" test in another section verifies it exists when appropriate
     });
 
     it("should mark revision memo as not done when changeNote is empty", () => {
@@ -551,8 +519,8 @@ describe("computeNextActions", () => {
       expect(incompleteTasks.length).toBeGreaterThan(0);
     });
 
-    it("should return less than 3 actions when fewer than 3 total actions exist", () => {
-      // Only monthly, housing-assumptions, and events (no housing-selection, no revision-memo)
+    it("should return exactly 3 actions when total actions equal 3", () => {
+      // With no housing-selection and no revision-memo, we have exactly 3 actions
       const result = computeNextActions({
         currentMonthly: null,
         housingAssumptions: [], // Less than required, so no housing-selection
@@ -561,7 +529,8 @@ describe("computeNextActions", () => {
         planId,
       });
 
-      expect(result.length).toBe(3); // monthly, housing-assumptions, events
+      // Total actions: monthly, housing-assumptions, events = 3
+      expect(result.length).toBe(3);
     });
   });
 
