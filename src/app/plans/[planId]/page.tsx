@@ -1016,7 +1016,7 @@ export default function PlanDashboardPage() {
                     </div>
                   )}
                 </CardContent>
-                {!eventVersionMissing && (
+                {!eventVersionMissing && upcomingEvents.length > 0 && (
                   <CardFooter className="flex flex-col gap-2 sm:flex-row sm:items-center">
                     <Button
                       asChild
