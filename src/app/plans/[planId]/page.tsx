@@ -98,12 +98,7 @@ export default function PlanDashboardPage() {
   const [dashboardState, setDashboardState] = useState<DashboardState>("READY");
   const [isLoading, setIsLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
-  const [scenario, setScenario] = useState<ScenarioKey>(parsedScenario);
   const [selectedTab, setSelectedTab] = useState("dashboard");
-
-  useEffect(() => {
-    setScenario(parsedScenario);
-  }, [parsedScenario]);
 
   const planName = plan?.name ?? "プラン";
 
@@ -182,8 +177,7 @@ export default function PlanDashboardPage() {
   };
 
   const handleScenarioChange = (value: ScenarioKey) => {
-    if (value === scenario) return;
-    setScenario(value);
+    if (value === parsedScenario) return;
     const nextParams = new URLSearchParams(searchParams.toString());
     nextParams.set("scenario", value);
     const query = nextParams.toString();
@@ -360,7 +354,7 @@ export default function PlanDashboardPage() {
           <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             {/* Scenario Selector */}
             <Tabs
-              value={scenario}
+              value={parsedScenario}
               onValueChange={(value) =>
                 handleScenarioChange(value as ScenarioKey)
               }
@@ -711,7 +705,7 @@ export default function PlanDashboardPage() {
                 <CardHeader>
                   <CardTitle>将来見通し（簡易）</CardTitle>
                   <CardDescription>
-                    シナリオ: {formatScenarioLabel(scenario)}
+                    シナリオ: {formatScenarioLabel(parsedScenario)}
                   </CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-4">
