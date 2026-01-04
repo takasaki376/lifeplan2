@@ -326,7 +326,6 @@ export default function HousingLCCPage() {
 
   const handleScenarioChange = (value: ScenarioKey) => {
     if (value === scenarioKey) return;
-    setScenarioKey(value);
     const nextParams = new URLSearchParams(searchParams.toString());
     nextParams.set("scenario", value);
     const query = nextParams.toString();
