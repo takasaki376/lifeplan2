@@ -503,6 +503,16 @@ describe("PlanDashboardPage", () => {
     );
   });
 
+  it("falls back to base scenario when an invalid scenario is specified in query parameter", async () => {
+    searchParamsInstance = new URLSearchParams("scenario=invalid");
+
+    render(<PlanDashboardPage />);
+
+    await waitFor(() =>
+      expect(screen.getByText("シナリオ: 標準")).toBeInTheDocument()
+    );
+  });
+
   it("replaces the URL when scenario tab changes", async () => {
     const user = userEvent.setup();
     render(<PlanDashboardPage />);

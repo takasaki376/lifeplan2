@@ -8,6 +8,8 @@ const pushMock = vi.fn();
 vi.mock("next/navigation", () => ({
   useParams: () => ({ planId: "plan-123" }),
   useRouter: () => ({ push: pushMock }),
+  useSearchParams: () => new URLSearchParams(),
+  usePathname: () => "/plans/plan-123",
 }));
 
 vi.mock("next/link", () => ({
