@@ -865,11 +865,14 @@ export default function PlanDashboardPage() {
                             </p>
                           </div>
                           <div className="flex items-center gap-2">
-                            {!item.done && (
-                              <Button asChild size="sm">
-                                <Link href={item.href}>{item.cta}</Link>
-                              </Button>
-                            )}
+                            <Button
+                              asChild
+                              size="sm"
+                              variant={item.done ? "outline" : "default"}
+                            >
+                              <Link href={item.href}>{item.cta}</Link>
+                            </Button>
+
                             {item.secondaryCta && (
                               <Button asChild size="sm" variant="ghost">
                                 <Link href={item.secondaryCta.href}>

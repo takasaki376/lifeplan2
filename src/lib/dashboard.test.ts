@@ -11,7 +11,9 @@ describe("computeNextActions", () => {
   const versionId = "test-version-id";
 
   // Helper function to create a minimal MonthlyRecord
-  const createMonthlyRecord = (overrides?: Partial<MonthlyRecord>): MonthlyRecord => ({
+  const createMonthlyRecord = (
+    overrides?: Partial<MonthlyRecord>
+  ): MonthlyRecord => ({
     id: "monthly-1",
     planId,
     ym: "2026-01",
@@ -35,7 +37,9 @@ describe("computeNextActions", () => {
   });
 
   // Helper function to create a minimal PlanVersion
-  const createPlanVersion = (overrides?: Partial<PlanVersion>): PlanVersion => ({
+  const createPlanVersion = (
+    overrides?: Partial<PlanVersion>
+  ): PlanVersion => ({
     id: versionId,
     planId,
     versionNo: 1,
@@ -56,7 +60,7 @@ describe("computeNextActions", () => {
 
       const monthlyAction = result.find((a) => a.key === "monthly");
       expect(monthlyAction?.done).toBe(true);
-      expect(monthlyAction?.cta).toBe("今月を編集");
+      expect(monthlyAction?.cta).toBe("今月の家計を編集");
     });
 
     it("should mark monthly action as not done when currentMonthly is null", () => {
@@ -70,7 +74,7 @@ describe("computeNextActions", () => {
 
       const monthlyAction = result.find((a) => a.key === "monthly");
       expect(monthlyAction?.done).toBe(false);
-      expect(monthlyAction?.cta).toBe("今月を入力");
+      expect(monthlyAction?.cta).toBe("今月の家計を入力");
     });
 
     it("should mark monthly action as not done when currentMonthly is undefined", () => {
@@ -193,7 +197,9 @@ describe("computeNextActions", () => {
     });
 
     it("should mark revision memo as done when changeNote exists", () => {
-      const currentVersion = createPlanVersion({ changeNote: "Some revision note" });
+      const currentVersion = createPlanVersion({
+        changeNote: "Some revision note",
+      });
 
       // Due to the 3-item limit, revision-memo may not always appear in results
       // This test verifies that IF it appears, it has the correct done flag
@@ -448,7 +454,8 @@ describe("computeNextActions", () => {
 
       // Verify incomplete come first
       const firstIncompleteIndex = result.findIndex((a) => !a.done);
-      const lastCompleteIndex = result.length - 1 - [...result].reverse().findIndex((a) => a.done);
+      const lastCompleteIndex =
+        result.length - 1 - [...result].reverse().findIndex((a) => a.done);
 
       if (incompleteTasks.length > 0 && completeTasks.length > 0) {
         expect(firstIncompleteIndex).toBeLessThan(lastCompleteIndex);
