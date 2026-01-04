@@ -4,10 +4,15 @@ import { cleanup, render } from "@testing-library/react";
 import HousingLCCPage from "./page";
 
 const pushMock = vi.fn();
+const replaceMock = vi.fn();
+const routerMock = {
+  push: pushMock,
+  replace: replaceMock,
+};
 
 vi.mock("next/navigation", () => ({
   useParams: () => ({ planId: "plan-123" }),
-  useRouter: () => ({ push: pushMock }),
+  useRouter: () => routerMock,
   useSearchParams: () => new URLSearchParams(),
   usePathname: () => "/plans/plan-123",
 }));
