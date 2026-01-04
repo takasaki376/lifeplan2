@@ -128,6 +128,19 @@ export default function PlanDashboardPage() {
     );
   };
 
+  const formatEventAmount = (amount?: number) => {
+    if (!Number.isFinite(amount)) {
+      return "未設定";
+    }
+    if (amount === 0) {
+      return "0円";
+    }
+    return formatYen(amount, {
+      showDashForEmpty: false,
+      sign: "never",
+    });
+  };
+
   const getCurrentMonthLabel = () => {
     const formatted = formatYearMonth(currentYm);
     if (formatted && formatted !== "?") return formatted;
@@ -155,7 +168,7 @@ export default function PlanDashboardPage() {
 
   const getScenarioLabel = (s: typeof scenario) => {
     const labels = {
-      conservative: "保守的",
+      conservative: "保守",
       standard: "標準",
       optimistic: "楽観",
     };
@@ -944,10 +957,8 @@ export default function PlanDashboardPage() {
                         const eventTypeLabel =
                           EVENT_TYPE_LABELS[event.eventType as EventTypeKey] ??
                           event.eventType;
-                        const amountText = formatYen(event.amountYen, {
-                          showDashForEmpty: false,
-                          sign: "never",
-                        });
+                        const amountText = formatEventAmount(event.amountYen);
+                        const hasAmount = amountText !== "未設定";
                         return (
                           <Link
                             key={event.id}
@@ -988,8 +999,11 @@ export default function PlanDashboardPage() {
                                 </div>
                                 <p className="text-sm font-semibold text-foreground">
                                   {amountText}
-                                  {event.cadence === "monthly" && " /月"}
-                                  {event.cadence === "monthly" &&
+                                  {hasAmount &&
+                                    event.cadence === "monthly" &&
+                                    " /月"}
+                                  {hasAmount &&
+                                    event.cadence === "monthly" &&
                                     event.durationMonths && (
                                       <>（{event.durationMonths}ヶ月）</>
                                     )}
