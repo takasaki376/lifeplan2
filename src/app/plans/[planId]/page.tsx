@@ -2,7 +2,12 @@
 
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { useParams, useRouter } from "next/navigation";
+import {
+  useParams,
+  useRouter,
+  useSearchParams,
+  usePathname,
+} from "next/navigation";
 import {
   Home,
   Calendar,
@@ -47,6 +52,14 @@ import type {
 import type { EventTypeKey } from "@/lib/domain/eventTypes";
 import { createRepositories } from "@/lib/repo/factory";
 import { EVENT_TYPE_LABELS } from "@/lib/domain/eventTypes";
+import {
+  formatScenarioLabel,
+  parseScenario,
+  scenarioKeys,
+} from "@/lib/scenario";
+import type { ScenarioKey } from "@/lib/scenario";
+import { useScenarioNavigation } from "@/lib/hooks/useScenarioNavigation";
+import { useTabNavigation } from "@/lib/hooks/useTabNavigation";
 
 type DashboardState =
   | "FIRST_TIME"
@@ -60,9 +73,13 @@ const REQUIRED_HOUSING_TYPES = 4;
 export default function PlanDashboardPage() {
   const params = useParams();
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const pathname = usePathname();
   const planId = params.planId as string;
   const repos = useMemo(() => createRepositories(), []);
   const currentYm = getCurrentYearMonth();
+  const scenarioParam = searchParams.get("scenario");
+  const parsedScenario = parseScenario(scenarioParam);
 
   const [plan, setPlan] = useState<Plan | null>(null);
   const [currentVersion, setCurrentVersion] = useState<PlanVersion | null>(
@@ -83,10 +100,9 @@ export default function PlanDashboardPage() {
   const [dashboardState, setDashboardState] = useState<DashboardState>("READY");
   const [isLoading, setIsLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
-  const [scenario, setScenario] = useState<
-    "conservative" | "standard" | "optimistic"
-  >("standard");
   const [selectedTab, setSelectedTab] = useState("dashboard");
+  const { changeScenario } = useScenarioNavigation();
+  const { changeTab } = useTabNavigation(planId);
 
   const planName = plan?.name ?? "プラン";
 
@@ -147,30 +163,6 @@ export default function PlanDashboardPage() {
     if (!housing.some((item) => item.isSelected)) return "NEEDS_SELECTION";
     if (eventsLength === 0) return "NEEDS_EVENTS";
     return "READY";
-  };
-
-  const getScenarioLabel = (s: typeof scenario) => {
-    const labels = {
-      conservative: "保守",
-      standard: "標準",
-      optimistic: "楽観",
-    };
-    return labels[s];
-  };
-
-  const handleTabChange = (value: string) => {
-    setSelectedTab(value);
-    const routes: Record<string, string> = {
-      dashboard: `/plans/${planId}`,
-      monthly: `/plans/${planId}/months`,
-      housing: `/plans/${planId}/housing`,
-      events: `/plans/${planId}/events`,
-      versions: `/plans/${planId}/versions`,
-    };
-    const next = routes[value];
-    if (next && value !== "dashboard") {
-      router.push(next);
-    }
   };
 
   useEffect(() => {
@@ -342,14 +334,18 @@ export default function PlanDashboardPage() {
           <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             {/* Scenario Selector */}
             <Tabs
-              value={scenario}
-              onValueChange={(v) => setScenario(v as typeof scenario)}
+              value={parsedScenario}
+              onValueChange={(value) =>
+                changeScenario(value as ScenarioKey, parsedScenario)
+              }
               className="w-full sm:w-auto"
             >
               <TabsList className="grid w-full grid-cols-3 sm:w-auto">
-                <TabsTrigger value="conservative">保守</TabsTrigger>
-                <TabsTrigger value="standard">標準</TabsTrigger>
-                <TabsTrigger value="optimistic">楽観</TabsTrigger>
+                {scenarioKeys.map((key) => (
+                  <TabsTrigger key={key} value={key}>
+                    {formatScenarioLabel(key)}
+                  </TabsTrigger>
+                ))}
               </TabsList>
             </Tabs>
 
@@ -367,7 +363,7 @@ export default function PlanDashboardPage() {
         <div className="container mx-auto px-4 sm:px-6">
           {/* Desktop Tabs */}
           <div className="hidden sm:block">
-            <Tabs value={selectedTab} onValueChange={handleTabChange}>
+            <Tabs value={selectedTab} onValueChange={changeTab}>
               <TabsList className="h-auto w-full justify-start rounded-none border-0 bg-transparent p-0">
                 <TabsTrigger
                   value="dashboard"
@@ -424,23 +420,23 @@ export default function PlanDashboardPage() {
                 </Button>
               </DropdownMenuTrigger>
               <DropdownMenuContent className="w-56">
-                <DropdownMenuItem onSelect={() => handleTabChange("dashboard")}>
+                <DropdownMenuItem onSelect={() => changeTab("dashboard")}>
                   <Home className="mr-2 h-4 w-4" />
                   ダッシュボード
                 </DropdownMenuItem>
-                <DropdownMenuItem onSelect={() => handleTabChange("monthly")}>
+                <DropdownMenuItem onSelect={() => changeTab("monthly")}>
                   <Calendar className="mr-2 h-4 w-4" />
                   月次
                 </DropdownMenuItem>
-                <DropdownMenuItem onSelect={() => handleTabChange("housing")}>
+                <DropdownMenuItem onSelect={() => changeTab("housing")}>
                   <Home className="mr-2 h-4 w-4" />
                   住宅LCC
                 </DropdownMenuItem>
-                <DropdownMenuItem onSelect={() => handleTabChange("events")}>
+                <DropdownMenuItem onSelect={() => changeTab("events")}>
                   <Calendar className="mr-2 h-4 w-4" />
                   イベント
                 </DropdownMenuItem>
-                <DropdownMenuItem onSelect={() => handleTabChange("versions")}>
+                <DropdownMenuItem onSelect={() => changeTab("versions")}>
                   <History className="mr-2 h-4 w-4" />
                   見直し（改定）
                 </DropdownMenuItem>
@@ -689,7 +685,7 @@ export default function PlanDashboardPage() {
                 <CardHeader>
                   <CardTitle>将来見通し（簡易）</CardTitle>
                   <CardDescription>
-                    シナリオ: {getScenarioLabel(scenario)}
+                    シナリオ: {formatScenarioLabel(parsedScenario)}
                   </CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-4">

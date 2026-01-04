@@ -2,7 +2,12 @@
 
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { useParams, useRouter } from "next/navigation";
+import {
+  useParams,
+  useRouter,
+  useSearchParams,
+  usePathname,
+} from "next/navigation";
 import {
   Home,
   BarChart3,
@@ -49,6 +54,13 @@ import {
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import type { ScenarioKey } from "@/lib/domain/types";
 import { createRepositories } from "@/lib/repo/factory";
+import {
+  formatScenarioLabel,
+  parseScenario,
+  scenarioKeys,
+} from "@/lib/scenario";
+import { useScenarioNavigation } from "@/lib/hooks/useScenarioNavigation";
+import { useTabNavigation } from "@/lib/hooks/useTabNavigation";
 
 // Toggle for empty state testing
 const HAS_HOUSING_ASSUMPTIONS = true;
@@ -87,12 +99,17 @@ type ChartView = "total" | "annual" | "breakdown";
 export default function HousingLCCPage() {
   const params = useParams();
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const pathname = usePathname();
   const planId = params.planId as string;
   const repos = useMemo(() => createRepositories(), []);
   const tabValue = "housing";
   const [planName, setPlanName] = useState("プラン");
+  const { changeScenario } = useScenarioNavigation();
+  const { changeTab } = useTabNavigation(planId);
 
-  const [scenarioKey, setScenarioKey] = useState<ScenarioKey>("base");
+  const scenarioParam = searchParams.get("scenario");
+  const parsedScenario = parseScenario(scenarioParam);
   const [horizonYears, setHorizonYears] = useState<string>("35");
   const [selectedType, setSelectedType] = useState<HousingType | null>(
     "high_performance_home"
@@ -303,28 +320,8 @@ export default function HousingLCCPage() {
     ],
   };
 
-  const currentData = mockLCCData[scenarioKey];
+  const currentData = mockLCCData[parsedScenario];
   const selectedHousing = currentData.find((h) => h.type === selectedType);
-
-  const scenarioLabels: Record<ScenarioKey, string> = {
-    conservative: "保守",
-    base: "標準",
-    optimistic: "楽観",
-  };
-
-  const handleTabChange = (value: string) => {
-    const routes: Record<string, string> = {
-      dashboard: `/plans/${planId}`,
-      monthly: `/plans/${planId}/months`,
-      housing: `/plans/${planId}/housing`,
-      events: `/plans/${planId}/events`,
-      versions: `/plans/${planId}/versions`,
-    };
-    const next = routes[value];
-    if (next) {
-      router.push(next);
-    }
-  };
 
   if (!HAS_HOUSING_ASSUMPTIONS) {
     return (
@@ -358,7 +355,7 @@ export default function HousingLCCPage() {
             <div className="px-4 sm:px-6">
               {/* Desktop Tabs */}
               <div className="hidden sm:block">
-                <Tabs value={tabValue} onValueChange={handleTabChange}>
+                <Tabs value={tabValue} onValueChange={changeTab}>
                   <TabsList className="h-auto w-full justify-start rounded-none border-0 bg-transparent p-0">
                     <TabsTrigger
                       value="dashboard"
@@ -415,23 +412,23 @@ export default function HousingLCCPage() {
                     </Button>
                   </DropdownMenuTrigger>
                   <DropdownMenuContent className="w-56">
-                    <DropdownMenuItem onSelect={() => handleTabChange("dashboard")}>
+                    <DropdownMenuItem onSelect={() => changeTab("dashboard")}>
                       <Home className="mr-2 h-4 w-4" />
                       ダッシュボード
                     </DropdownMenuItem>
-                    <DropdownMenuItem onSelect={() => handleTabChange("monthly")}>
+                    <DropdownMenuItem onSelect={() => changeTab("monthly")}>
                       <Calendar className="mr-2 h-4 w-4" />
                       月次
                     </DropdownMenuItem>
-                    <DropdownMenuItem onSelect={() => handleTabChange("housing")}>
+                    <DropdownMenuItem onSelect={() => changeTab("housing")}>
                       <Home className="mr-2 h-4 w-4" />
                       住宅LCC
                     </DropdownMenuItem>
-                    <DropdownMenuItem onSelect={() => handleTabChange("events")}>
+                    <DropdownMenuItem onSelect={() => changeTab("events")}>
                       <Calendar className="mr-2 h-4 w-4" />
                       イベント
                     </DropdownMenuItem>
-                    <DropdownMenuItem onSelect={() => handleTabChange("versions")}>
+                    <DropdownMenuItem onSelect={() => changeTab("versions")}>
                       <History className="mr-2 h-4 w-4" />
                       見直し（改定）
                     </DropdownMenuItem>
@@ -496,21 +493,21 @@ export default function HousingLCCPage() {
 
           <div className="flex flex-wrap items-center gap-3">
             {/* Scenario selector */}
-            <div className="flex rounded-lg border bg-card p-1">
-              {(["conservative", "base", "optimistic"] as ScenarioKey[]).map(
-                (key) => (
-                  <Button
-                    key={key}
-                    variant={scenarioKey === key ? "default" : "ghost"}
-                    size="sm"
-                    onClick={() => setScenarioKey(key)}
-                    className="min-w-[60px]"
-                  >
-                    {scenarioLabels[key]}
-                  </Button>
-                )
-              )}
-            </div>
+            <Tabs
+              value={parsedScenario}
+              onValueChange={(value) =>
+                changeScenario(value as ScenarioKey, parsedScenario)
+              }
+              className="w-full sm:w-auto"
+            >
+              <TabsList className="grid w-full grid-cols-3 sm:w-auto">
+                {scenarioKeys.map((key) => (
+                  <TabsTrigger key={key} value={key}>
+                    {formatScenarioLabel(key)}
+                  </TabsTrigger>
+                ))}
+              </TabsList>
+            </Tabs>
 
             {/* Horizon selector */}
             <Select value={horizonYears} onValueChange={setHorizonYears}>
@@ -539,7 +536,7 @@ export default function HousingLCCPage() {
           <div className="px-4 sm:px-6">
             {/* Desktop Tabs */}
             <div className="hidden sm:block">
-              <Tabs value={tabValue} onValueChange={handleTabChange}>
+              <Tabs value={tabValue} onValueChange={changeTab}>
                 <TabsList className="h-auto w-full justify-start rounded-none border-0 bg-transparent p-0">
                   <TabsTrigger
                     value="dashboard"
@@ -596,23 +593,23 @@ export default function HousingLCCPage() {
                   </Button>
                 </DropdownMenuTrigger>
                 <DropdownMenuContent className="w-56">
-                  <DropdownMenuItem onSelect={() => handleTabChange("dashboard")}>
+                  <DropdownMenuItem onSelect={() => changeTab("dashboard")}>
                     <Home className="mr-2 h-4 w-4" />
                     ダッシュボード
                   </DropdownMenuItem>
-                  <DropdownMenuItem onSelect={() => handleTabChange("monthly")}>
+                  <DropdownMenuItem onSelect={() => changeTab("monthly")}>
                     <Calendar className="mr-2 h-4 w-4" />
                     月次
                   </DropdownMenuItem>
-                  <DropdownMenuItem onSelect={() => handleTabChange("housing")}>
+                  <DropdownMenuItem onSelect={() => changeTab("housing")}>
                     <Home className="mr-2 h-4 w-4" />
                     住宅LCC
                   </DropdownMenuItem>
-                  <DropdownMenuItem onSelect={() => handleTabChange("events")}>
+                  <DropdownMenuItem onSelect={() => changeTab("events")}>
                     <Calendar className="mr-2 h-4 w-4" />
                     イベント
                   </DropdownMenuItem>
-                  <DropdownMenuItem onSelect={() => handleTabChange("versions")}>
+                  <DropdownMenuItem onSelect={() => changeTab("versions")}>
                     <History className="mr-2 h-4 w-4" />
                     見直し（改定）
                   </DropdownMenuItem>
@@ -641,7 +638,8 @@ export default function HousingLCCPage() {
 
             <div className="flex items-center gap-2">
               <span className="text-sm font-semibold">
-                {horizonYears}年累計 LCC（{scenarioLabels[scenarioKey]}）:
+                {horizonYears}年累計 LCC（{formatScenarioLabel(parsedScenario)}
+                ）:
               </span>
               <span className="text-lg font-bold">
                 {selectedHousing
