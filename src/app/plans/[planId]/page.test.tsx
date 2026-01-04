@@ -86,13 +86,18 @@ vi.mock("@/lib/format", () => ({
     }
     const sign = options?.sign ?? "auto";
     const formatted = `${Math.abs(value)}`;
+    const suffix = options?.suffix ?? "円";
     if (sign === "always") {
-      return value >= 0 ? `+${formatted}` : `-${formatted}`;
+      return value >= 0
+        ? `+${formatted}${suffix}`
+        : `-${formatted}${suffix}`;
     }
     if (sign === "never") {
-      return formatted;
+      return `${formatted}${suffix}`;
     }
-    return value >= 0 ? `${formatted}` : `-${formatted}`;
+    return value >= 0
+      ? `${formatted}${suffix}`
+      : `-${formatted}${suffix}`;
   },
 }));
 
