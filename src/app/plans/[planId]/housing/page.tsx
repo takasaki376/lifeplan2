@@ -429,7 +429,6 @@ export default function HousingLCCPage() {
                       イベント
                     </DropdownMenuItem>
                     <DropdownMenuItem onSelect={() => changeTab("versions")}>
-                      {" "}
                       <History className="mr-2 h-4 w-4" />
                       見直し（改定）
                     </DropdownMenuItem>

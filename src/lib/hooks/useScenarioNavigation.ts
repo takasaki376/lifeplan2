@@ -10,7 +10,6 @@ export const useScenarioNavigation = () => {
     value: ScenarioKey,
     currentScenario: ScenarioKey
   ) => {
-    if (value === currentScenario) return;
     const nextParams = new URLSearchParams(searchParams.toString());
     nextParams.set("scenario", value);
     const query = nextParams.toString();
