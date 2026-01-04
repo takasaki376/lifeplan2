@@ -8,7 +8,7 @@ import {
   it,
   vi,
 } from "vitest";
-import { cleanup, render, screen, waitFor } from "@testing-library/react";
+import { cleanup, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import type {
   HousingAssumptions,
@@ -460,11 +460,12 @@ describe("PlanDashboardPage", () => {
   it("shows the events list link in the header", async () => {
     render(<PlanDashboardPage />);
 
-    await waitFor(() =>
+    await waitFor(() => {
+      const card = screen.getByTestId("life-events-card");
       expect(
-        screen.getByRole("link", { name: "イベント一覧" })
-      ).toHaveAttribute("href", "/plans/plan-123/events")
-    );
+        within(card).getByRole("link", { name: "イベント一覧" })
+      ).toHaveAttribute("href", "/plans/plan-123/events");
+    });
   });
 
   it("shows version missing state only in the events card", async () => {
