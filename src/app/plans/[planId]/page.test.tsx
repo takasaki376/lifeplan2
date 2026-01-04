@@ -431,5 +431,15 @@ describe("PlanDashboardPage", () => {
       "/plans/plan-123/versions/new",
     );
   });
+
+  it("shows event fetch error alert when event listing fails", async () => {
+    eventListByVersionMock.mockRejectedValue(new Error("db error"));
+
+    render(<PlanDashboardPage />);
+
+    await waitFor(() =>
+      expect(screen.getByText("イベントの取得に失敗しました")).toBeInTheDocument(),
+    );
+  });
 });
 
