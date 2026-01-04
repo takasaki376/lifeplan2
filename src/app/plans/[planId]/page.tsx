@@ -252,8 +252,8 @@ export default function PlanDashboardPage() {
           if (!active) return;
           setEventError("イベントの取得に失敗しました");
         } finally {
-          if (!active) return;
           setEventLoading(false);
+          if (!active) return;
         }
 
         if (!active) return;
