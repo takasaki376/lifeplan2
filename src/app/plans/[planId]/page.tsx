@@ -100,14 +100,9 @@ export default function PlanDashboardPage() {
   const [dashboardState, setDashboardState] = useState<DashboardState>("READY");
   const [isLoading, setIsLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
-  const [scenario, setScenario] = useState<ScenarioKey>(parsedScenario);
   const [selectedTab, setSelectedTab] = useState("dashboard");
   const { changeScenario } = useScenarioNavigation();
   const { changeTab } = useTabNavigation(planId);
-
-  useEffect(() => {
-    setScenario(parsedScenario);
-  }, [parsedScenario]);
 
   const planName = plan?.name ?? "プラン";
 
@@ -169,10 +164,6 @@ export default function PlanDashboardPage() {
     if (eventsLength === 0) return "NEEDS_EVENTS";
     return "READY";
   };
-
-
-
-
 
   useEffect(() => {
     let active = true;
@@ -343,7 +334,7 @@ export default function PlanDashboardPage() {
           <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             {/* Scenario Selector */}
             <Tabs
-              value={scenario}
+              value={parsedScenario}
               onValueChange={(value) =>
                 changeScenario(value as ScenarioKey, scenario)
               }
@@ -694,7 +685,7 @@ export default function PlanDashboardPage() {
                 <CardHeader>
                   <CardTitle>将来見通し（簡易）</CardTitle>
                   <CardDescription>
-                    シナリオ: {formatScenarioLabel(scenario)}
+                    シナリオ: {formatScenarioLabel(parsedScenario)}
                   </CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-4">
