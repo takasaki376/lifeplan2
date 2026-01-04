@@ -230,6 +230,7 @@ export default function PlanDashboardPage() {
           setCurrentMonthly(monthly ?? null);
           setHousingAssumptions([]);
           setDashboardState(resolveDashboardState(monthly, [], 0));
+          setIsLoading(false);
           return;
         }
 
