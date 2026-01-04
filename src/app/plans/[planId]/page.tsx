@@ -2,7 +2,12 @@
 
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { useParams, useRouter } from "next/navigation";
+import {
+  useParams,
+  useRouter,
+  useSearchParams,
+  usePathname,
+} from "next/navigation";
 import {
   Home,
   Calendar,
@@ -47,6 +52,12 @@ import type {
 import type { EventTypeKey } from "@/lib/domain/eventTypes";
 import { createRepositories } from "@/lib/repo/factory";
 import { EVENT_TYPE_LABELS } from "@/lib/domain/eventTypes";
+import {
+  formatScenarioLabel,
+  parseScenario,
+  scenarioKeys,
+} from "@/lib/scenario";
+import type { ScenarioKey } from "@/lib/scenario";
 
 type DashboardState =
   | "FIRST_TIME"
@@ -60,9 +71,13 @@ const REQUIRED_HOUSING_TYPES = 4;
 export default function PlanDashboardPage() {
   const params = useParams();
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const pathname = usePathname();
   const planId = params.planId as string;
   const repos = useMemo(() => createRepositories(), []);
   const currentYm = getCurrentYearMonth();
+  const scenarioParam = searchParams.get("scenario");
+  const parsedScenario = parseScenario(scenarioParam);
 
   const [plan, setPlan] = useState<Plan | null>(null);
   const [currentVersion, setCurrentVersion] = useState<PlanVersion | null>(
@@ -83,10 +98,12 @@ export default function PlanDashboardPage() {
   const [dashboardState, setDashboardState] = useState<DashboardState>("READY");
   const [isLoading, setIsLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
-  const [scenario, setScenario] = useState<
-    "conservative" | "standard" | "optimistic"
-  >("standard");
+  const [scenario, setScenario] = useState<ScenarioKey>(parsedScenario);
   const [selectedTab, setSelectedTab] = useState("dashboard");
+
+  useEffect(() => {
+    setScenario(parsedScenario);
+  }, [parsedScenario]);
 
   const planName = plan?.name ?? "プラン";
 
@@ -149,15 +166,6 @@ export default function PlanDashboardPage() {
     return "READY";
   };
 
-  const getScenarioLabel = (s: typeof scenario) => {
-    const labels = {
-      conservative: "保守",
-      standard: "標準",
-      optimistic: "楽観",
-    };
-    return labels[s];
-  };
-
   const handleTabChange = (value: string) => {
     setSelectedTab(value);
     const routes: Record<string, string> = {
@@ -171,6 +179,16 @@ export default function PlanDashboardPage() {
     if (next && value !== "dashboard") {
       router.push(next);
     }
+  };
+
+  const handleScenarioChange = (value: ScenarioKey) => {
+    if (value === scenario) return;
+    setScenario(value);
+    const nextParams = new URLSearchParams(searchParams.toString());
+    nextParams.set("scenario", value);
+    const query = nextParams.toString();
+    const nextUrl = query ? `${pathname}?${query}` : pathname;
+    void router.replace(nextUrl);
   };
 
   useEffect(() => {
@@ -343,13 +361,17 @@ export default function PlanDashboardPage() {
             {/* Scenario Selector */}
             <Tabs
               value={scenario}
-              onValueChange={(v) => setScenario(v as typeof scenario)}
+              onValueChange={(value) =>
+                handleScenarioChange(value as ScenarioKey)
+              }
               className="w-full sm:w-auto"
             >
               <TabsList className="grid w-full grid-cols-3 sm:w-auto">
-                <TabsTrigger value="conservative">保守</TabsTrigger>
-                <TabsTrigger value="standard">標準</TabsTrigger>
-                <TabsTrigger value="optimistic">楽観</TabsTrigger>
+                {scenarioKeys.map((key) => (
+                  <TabsTrigger key={key} value={key}>
+                    {formatScenarioLabel(key)}
+                  </TabsTrigger>
+                ))}
               </TabsList>
             </Tabs>
 
@@ -689,7 +711,7 @@ export default function PlanDashboardPage() {
                 <CardHeader>
                   <CardTitle>将来見通し（簡易）</CardTitle>
                   <CardDescription>
-                    シナリオ: {getScenarioLabel(scenario)}
+                    シナリオ: {formatScenarioLabel(scenario)}
                   </CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-4">

@@ -9,6 +9,7 @@ import {
   vi,
 } from "vitest";
 import { cleanup, render, screen, waitFor } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import type {
   HousingAssumptions,
   LifeEvent,
@@ -24,13 +25,18 @@ const monthlyGetByYmMock = vi.fn();
 const housingListByVersionMock = vi.fn();
 const eventListByVersionMock = vi.fn();
 const pushMock = vi.fn();
+const replaceMock = vi.fn();
 const routerMock = {
   push: pushMock,
+  replace: replaceMock,
 };
+let searchParamsInstance = new URLSearchParams();
 
 vi.mock("next/navigation", () => ({
   useParams: () => ({ planId: "plan-123" }),
   useRouter: () => routerMock,
+  useSearchParams: () => searchParamsInstance,
+  usePathname: () => "/plans/plan-123",
 }));
 
 vi.mock("next/link", () => ({
@@ -88,16 +94,12 @@ vi.mock("@/lib/format", () => ({
     const formatted = `${Math.abs(value)}`;
     const suffix = options?.suffix ?? "円";
     if (sign === "always") {
-      return value >= 0
-        ? `+${formatted}${suffix}`
-        : `-${formatted}${suffix}`;
+      return value >= 0 ? `+${formatted}${suffix}` : `-${formatted}${suffix}`;
     }
     if (sign === "never") {
       return `${formatted}${suffix}`;
     }
-    return value >= 0
-      ? `${formatted}${suffix}`
-      : `-${formatted}${suffix}`;
+    return value >= 0 ? `${formatted}${suffix}` : `-${formatted}${suffix}`;
   },
 }));
 
@@ -216,6 +218,8 @@ describe("PlanDashboardPage", () => {
     housingListByVersionMock.mockReset();
     eventListByVersionMock.mockReset();
     pushMock.mockReset();
+    replaceMock.mockReset();
+    searchParamsInstance = new URLSearchParams();
 
     planGetMock.mockResolvedValue(makePlan({ id: "plan-123", name: "Plan A" }));
     versionGetCurrentMock.mockResolvedValue(
@@ -487,5 +491,32 @@ describe("PlanDashboardPage", () => {
         screen.getByText("イベントの取得に失敗しました")
       ).toBeInTheDocument()
     );
+  });
+
+  it("honors scenario query parameter for the outlook card", async () => {
+    searchParamsInstance = new URLSearchParams("scenario=optimistic");
+
+    render(<PlanDashboardPage />);
+
+    await waitFor(() =>
+      expect(screen.getByText("シナリオ: 楽観")).toBeInTheDocument()
+    );
+  });
+
+  it("replaces the URL when scenario tab changes", async () => {
+    const user = userEvent.setup();
+    render(<PlanDashboardPage />);
+
+    await waitFor(() =>
+      expect(screen.getByRole("tab", { name: "保守" })).toBeInTheDocument()
+    );
+
+    await user.click(screen.getByRole("tab", { name: "保守" }));
+
+    await waitFor(() => expect(replaceMock).toHaveBeenCalled());
+    const calledArg =
+      replaceMock.mock.calls[0]?.[0] ?? replaceMock.mock.calls[0]?.[0];
+    const normalizedArg = Array.isArray(calledArg) ? calledArg[0] : calledArg;
+    expect(normalizedArg).toBe("/plans/plan-123?scenario=conservative");
   });
 });
