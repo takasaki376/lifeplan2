@@ -385,12 +385,39 @@ describe("PlanDashboardPage", () => {
         link.getAttribute("aria-label") ||
         link.textContent?.trim().replace(/\s+/g, " "),
       ),
-    ).toEqual(["イベントA", "イベントB", "イベントC"]);
+    ).toEqual([
+      "イベントAを編集",
+      "イベントBを編集",
+      "イベントCを編集",
+    ]);
     expect(screen.getByRole("link", { name: "もっと見る" })).toHaveAttribute(
       "href",
       "/plans/plan-123/events",
     );
   });
+
+  const makeFooterEvents = (count: number) =>
+    Array.from({ length: count }, (_, idx) =>
+      makeEvent("ver-1", `event-footer-${idx + 1}`, {
+        title: `Footer Event ${idx + 1}`,
+        startYm: `2026-${(idx + 2).toString().padStart(2, "0")}`,
+      }),
+    );
+
+  it.each([1, 2, 3])(
+    "shows event footer without more link when there are %i upcoming events",
+    async (count) => {
+      eventListByVersionMock.mockResolvedValue(makeFooterEvents(count));
+
+      render(<PlanDashboardPage />);
+
+      await waitFor(() =>
+        expect(screen.getByText("Footer Event 1")).toBeInTheDocument(),
+      );
+      expect(screen.getByRole("link", { name: "イベントを追加" })).toBeInTheDocument();
+      expect(screen.queryByRole("link", { name: "もっと見る" })).not.toBeInTheDocument();
+    },
+  );
 
   it("falls back to event type label when title is empty", async () => {
     eventListByVersionMock.mockResolvedValue([
@@ -400,7 +427,9 @@ describe("PlanDashboardPage", () => {
     render(<PlanDashboardPage />);
 
     await waitFor(() =>
-      expect(screen.getByRole("link", { name: "教育" })).toBeInTheDocument(),
+      expect(
+        screen.getByRole("link", { name: /教育/ }),
+      ).toBeInTheDocument(),
     );
   });
 
