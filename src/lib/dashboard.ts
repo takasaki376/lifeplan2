@@ -96,7 +96,7 @@ export const computeNextActions = ({
   }
 
   // Sort and limit
-  const sortedActions = actions.sort((a, b) => {
+  const sortedActions = [...actions].sort((a, b) => {
     if (a.done && !b.done) return 1;
     if (!a.done && b.done) return -1;
     return 0;
