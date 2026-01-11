@@ -60,6 +60,7 @@ import {
 import type { ScenarioKey } from "@/lib/scenario";
 import { useScenarioNavigation } from "@/lib/hooks/useScenarioNavigation";
 import { useTabNavigation } from "@/lib/hooks/useTabNavigation";
+import { computeNextActions, REQUIRED_HOUSING_TYPES } from "@/lib/dashboard";
 
 type DashboardState =
   | "FIRST_TIME"
@@ -67,8 +68,6 @@ type DashboardState =
   | "NEEDS_SELECTION"
   | "NEEDS_EVENTS"
   | "READY";
-
-const REQUIRED_HOUSING_TYPES = 4;
 
 export default function PlanDashboardPage() {
   const params = useParams();
@@ -260,13 +259,10 @@ export default function PlanDashboardPage() {
   }, [currentYm, planId, repos]);
 
   const hasMonthlyRecord = Boolean(currentMonthly);
-  const isMonthlyComplete = currentMonthly?.isFinalized ?? false;
   const hasHousingAssumptions =
     housingAssumptions.length >= REQUIRED_HOUSING_TYPES;
-  const hasSelectedHousing = housingAssumptions.some((item) => item.isSelected);
-  const hasEvents = eventCount > 0;
   const showForecast = dashboardState === "READY";
-  const showHousingSummary = hasHousingAssumptions && hasSelectedHousing;
+  const showHousingSummary = housingAssumptions.some((item) => item.isSelected);
   const showEventFooter =
     !eventVersionMissing &&
     upcomingEvents.length > 0 &&
@@ -289,33 +285,13 @@ export default function PlanDashboardPage() {
     ? formatDateShort(currentVersion.createdAt)
     : undefined;
   const versionNote = currentVersion?.changeNote;
-  const nextActions = [
-    {
-      key: "monthly",
-      label: "今月の家計を入力",
-      done: isMonthlyComplete,
-      href: `/plans/${planId}/months/current`,
-    },
-    {
-      key: "housing-assumptions",
-      label: "住宅前提を設定",
-      done: hasHousingAssumptions,
-      href: `/plans/${planId}/housing/assumptions`,
-    },
-    {
-      key: "housing-selection",
-      label: "住宅タイプを選択",
-      done: hasSelectedHousing,
-      href: `/plans/${planId}/housing`,
-      visible: hasHousingAssumptions,
-    },
-    {
-      key: "events",
-      label: "イベントを追加",
-      done: hasEvents,
-      href: `/plans/${planId}/events/new`,
-    },
-  ].filter((item) => item.visible !== false);
+  const nextActions = computeNextActions({
+    currentMonthly,
+    housingAssumptions,
+    eventCount,
+    currentVersion,
+    planId,
+  });
   return (
     <div className="min-h-screen bg-muted/30">
       {/* Sticky Header */}
@@ -854,46 +830,70 @@ export default function PlanDashboardPage() {
                 </CardHeader>
                 <CardContent>
                   <div className="space-y-3">
-                    {nextActions.map((item) => (
-                      <div
-                        key={item.key}
-                        className="flex items-center gap-3 rounded-lg border bg-card p-3 transition-colors hover:bg-muted/50"
-                      >
+                    {isLoading ? (
+                      <p className="text-sm text-muted-foreground">
+                        読み込み中...
+                      </p>
+                    ) : nextActions.length > 0 ? (
+                      nextActions.map((item) => (
                         <div
-                          className={`flex h-5 w-5 items-center justify-center rounded-full border-2 ${
-                            item.done
-                              ? "border-green-500 bg-green-500"
-                              : "border-muted-foreground"
+                          key={item.key}
+                          className={`flex items-center gap-3 rounded-lg border bg-card p-3 ${
+                            !item.done ? "hover:bg-muted/50" : ""
                           }`}
                         >
-                          {item.done && (
-                            <CheckCircle2 className="h-3 w-3 text-white" />
-                          )}
+                          <div
+                            className={`flex h-5 w-5 items-center justify-center rounded-full border-2 ${
+                              item.done
+                                ? "border-green-500 bg-green-500"
+                                : "border-muted-foreground"
+                            }`}
+                          >
+                            {item.done && (
+                              <CheckCircle2 className="h-3 w-3 text-white" />
+                            )}
+                          </div>
+                          <div className="flex-1">
+                            <p
+                              className={`text-sm ${
+                                item.done
+                                  ? "text-muted-foreground line-through"
+                                  : ""
+                              }`}
+                            >
+                              {item.label}
+                            </p>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <Button
+                              asChild
+                              size="sm"
+                              variant={item.done ? "outline" : "default"}
+                            >
+                              <Link href={item.href}>{item.cta}</Link>
+                            </Button>
+
+                            {item.secondaryCta && (
+                              <Button asChild size="sm" variant="ghost">
+                                <Link href={item.secondaryCta.href}>
+                                  {item.secondaryCta.label}
+                                </Link>
+                              </Button>
+                            )}
+                          </div>
                         </div>
-                        <span
-                          className={`flex-1 text-sm ${
-                            item.done
-                              ? "text-muted-foreground line-through"
-                              : ""
-                          }`}
-                        >
-                          {item.label}
-                        </span>
-                        {!item.done && (
-                          <Button asChild size="sm" variant="ghost">
-                            <Link href={item.href}>
-                              <ChevronRight className="h-4 w-4" />
-                            </Link>
-                          </Button>
-                        )}
-                      </div>
-                    ))}
+                      ))
+                    ) : (
+                      <p className="text-center text-sm text-muted-foreground py-4">
+                        基本的な設定は完了しています！
+                      </p>
+                    )}
                   </div>
                 </CardContent>
               </Card>
 
               {/* 5) LIFE EVENTS CARD */}
-              <Card className="shadow-sm">
+              <Card className="shadow-sm" data-testid="life-events-card">
                 <CardHeader>
                   <div className="flex items-center justify-between gap-2">
                     <CardTitle className="text-lg">

@@ -112,7 +112,7 @@ describe("MonthlyInputSimplePage ([yyyy-mm])", () => {
     monthlyGetByYmMock.mockReset();
     monthlyUpsertByYmMock.mockReset();
     pushMock.mockReset();
-    planGetMock.mockResolvedValue(makePlan({ id: "plan-123", name: "テスト" }));
+    planGetMock.mockResolvedValue(makePlan({ id: "plan-123", name: "Test Plan" }));
   });
 
   it("shows existing record values and status", async () => {
@@ -121,7 +121,7 @@ describe("MonthlyInputSimplePage ([yyyy-mm])", () => {
     render(<MonthlyInputSimplePage />);
 
     await waitFor(() =>
-      expect(screen.getByRole("link", { name: "テスト" })).toBeInTheDocument(),
+      expect(screen.getByRole("link", { name: "Test Plan" })).toBeInTheDocument(),
     );
 
     expect(screen.getByText("入力済み")).toBeInTheDocument();
@@ -143,7 +143,10 @@ describe("MonthlyInputSimplePage ([yyyy-mm])", () => {
     render(<MonthlyInputSimplePage />);
 
     await waitFor(() =>
-      expect(screen.getByRole("link", { name: "テスト" })).toBeInTheDocument(),
+      expect(screen.getByRole("link", { name: "Test Plan" })).toBeInTheDocument(),
+    );
+    await waitFor(() =>
+      expect(monthlyGetByYmMock).toHaveBeenCalledWith("plan-123", "2026-01"),
     );
 
     const inputs = screen.getAllByPlaceholderText("0");
@@ -152,8 +155,9 @@ describe("MonthlyInputSimplePage ([yyyy-mm])", () => {
     await user.type(inputs[2], "3500000");
     await user.type(inputs[3], "24000000");
 
-    const saveButtons = screen.getAllByRole("button", { name: "保存して戻る" });
-    await user.click(saveButtons[0]);
+    const saveButton = screen.getByTestId("monthly-save-button");
+    await waitFor(() => expect(saveButton).toBeEnabled());
+    await user.click(saveButton);
 
     await waitFor(() => {
       expect(monthlyUpsertByYmMock).toHaveBeenCalledWith(
