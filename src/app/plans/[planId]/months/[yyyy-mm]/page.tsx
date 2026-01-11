@@ -326,7 +326,7 @@ export default function MonthlyInputSimplePage() {
                 </TabsList>
               </Tabs>
 
-              <Button onClick={() => handleSave(true)} disabled={actionDisabled}>
+              <Button onClick={() => handleSave(true)} disabled={actionDisabled} data-testid="monthly-save-button">
                 <Save className="mr-2 h-4 w-4" />
                 保存して戻る
               </Button>
@@ -706,6 +706,7 @@ export default function MonthlyInputSimplePage() {
             onClick={() => handleSave(true)}
             disabled={actionDisabled}
             className="flex-1 sm:flex-none"
+            data-testid="monthly-save-button-footer"
           >
             <Save className="mr-2 h-4 w-4" />
             保存して戻る
