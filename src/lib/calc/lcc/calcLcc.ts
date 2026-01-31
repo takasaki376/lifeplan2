@@ -68,12 +68,29 @@ const calcRentInitial = (
   warnings: string[],
 ): MoneyYen => {
   const rentAssumptions = housing.typeSpecific ?? {};
-  const deposit = "depositYen" in rentAssumptions ? rentAssumptions.depositYen : 0;
-  const keyMoney = "keyMoneyYen" in rentAssumptions ? rentAssumptions.keyMoneyYen : 0;
+
+  let deposit: number;
+  if ("depositYen" in rentAssumptions) {
+    // Use getNumber to handle undefined/null with a warning.
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    deposit = getNumber((rentAssumptions as any).depositYen, warnings, "depositYen");
+  } else {
+    warnings.push("Missing depositYen; treated as 0.");
+    deposit = 0;
+  }
+
+  let keyMoney: number;
+  if ("keyMoneyYen" in rentAssumptions) {
+    // Use getNumber to handle undefined/null with a warning.
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    keyMoney = getNumber((rentAssumptions as any).keyMoneyYen, warnings, "keyMoneyYen");
+  } else {
+    warnings.push("Missing keyMoneyYen; treated as 0.");
+    keyMoney = 0;
+  }
+
   const initialCost = housing.initialCostYen ?? 0;
-  if (deposit === undefined) warnings.push("Missing depositYen; treated as 0.");
-  if (keyMoney === undefined) warnings.push("Missing keyMoneyYen; treated as 0.");
-  return roundYen((deposit ?? 0) + (keyMoney ?? 0) + initialCost);
+  return roundYen(deposit + keyMoney + initialCost);
 };
 
 const emptySeries = (length: number): MoneyYen[] =>
