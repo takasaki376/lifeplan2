@@ -259,22 +259,21 @@ export const calcLcc = (params: CalcLccParams): CalcLccResult => {
   let repairsOrManagement: MoneyYen[];
   if (housing.housingType === "condo") {
     const typeSpec = housing.typeSpecific ?? {};
-    const managementFee =
-      "managementFeeMonthlyYen" in typeSpec
-        ? typeSpec.managementFeeMonthlyYen
-        : 0;
-    const repairReserve =
-      "repairReserveMonthlyYen" in typeSpec
-        ? typeSpec.repairReserveMonthlyYen
-        : 0;
-    const parking =
-      "parkingFeeMonthlyYen" in typeSpec ? typeSpec.parkingFeeMonthlyYen : 0;
-    if (managementFee === undefined)
-      warnings.push("Missing managementFeeMonthlyYen; treated as 0.");
-    if (repairReserve === undefined)
-      warnings.push("Missing repairReserveMonthlyYen; treated as 0.");
-    if (parking === undefined)
-      warnings.push("Missing parkingFeeMonthlyYen; treated as 0.");
+    const managementFee = getNumber(
+      typeSpec.managementFeeMonthlyYen,
+      warnings,
+      "managementFeeMonthlyYen",
+    );
+    const repairReserve = getNumber(
+      typeSpec.repairReserveMonthlyYen,
+      warnings,
+      "repairReserveMonthlyYen",
+    );
+    const parking = getNumber(
+      typeSpec.parkingFeeMonthlyYen,
+      warnings,
+      "parkingFeeMonthlyYen",
+    );
     repairsOrManagement = calcManagementSeries({
       managementFeeMonthlyYen: managementFee ?? 0,
       repairReserveMonthlyYen: repairReserve ?? 0,
