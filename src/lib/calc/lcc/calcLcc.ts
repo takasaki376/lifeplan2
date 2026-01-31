@@ -256,7 +256,7 @@ export const calcLcc = (params: CalcLccParams): CalcLccResult => {
     horizonMonths,
   });
 
-  let repairsOrManagement: MoneyYen[] = emptySeries(horizonMonths);
+  let repairsOrManagement: MoneyYen[];
   if (housing.housingType === "condo") {
     const typeSpec = housing.typeSpecific ?? {};
     const managementFee =
