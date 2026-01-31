@@ -161,16 +161,14 @@ export const calcLcc = (params: CalcLccParams): CalcLccResult => {
 
   if (housing.housingType === "rent") {
     const rentSpec = housing.typeSpecific ?? {};
-    const rentMonthly = "rentMonthlyYen" in rentSpec ? rentSpec.rentMonthlyYen : 0;
-    const renewalFee = "renewalFeeYen" in rentSpec ? rentSpec.renewalFeeYen : 0;
-    const renewalCycleYears =
-      "renewalCycleYears" in rentSpec ? rentSpec.renewalCycleYears : 0;
-    const movingCost = "movingCostYen" in rentSpec ? rentSpec.movingCostYen : 0;
-
-    if (rentMonthly === undefined) {
-      warnings.push("Missing rentMonthlyYen; treated as 0.");
-    }
-
+    const rentMonthly = getNumber(rentSpec.rentMonthlyYen, warnings, "rentMonthlyYen");
+    const renewalFee = getNumber(rentSpec.renewalFeeYen, warnings, "renewalFeeYen");
+    const renewalCycleYears = getNumber(
+      rentSpec.renewalCycleYears,
+      warnings,
+      "renewalCycleYears",
+    );
+    const movingCost = getNumber(rentSpec.movingCostYen, warnings, "movingCostYen");
     const rentSeries = calcRentSeries({
       rentMonthlyYen: rentMonthly ?? 0,
       rentIncreaseRateAnnual: inflationRate,
