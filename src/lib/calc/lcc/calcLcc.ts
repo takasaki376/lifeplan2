@@ -354,10 +354,10 @@ export const calcLccForHousingType = (
 export const calcLccForAllTypes = (
   items: HousingAssumptions[],
   params: Omit<CalcLccParams, "housing">,
-): Record<HousingType, CalcLccResult> => {
+): Partial<Record<HousingType, CalcLccResult>> => {
   const map: Partial<Record<HousingType, CalcLccResult>> = {};
   for (const item of items) {
     map[item.housingType] = calcLcc({ housing: item, ...params });
   }
-  return map as Record<HousingType, CalcLccResult>;
+  return map;
 };
