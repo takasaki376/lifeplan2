@@ -2,12 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import {
-  useParams,
-  useRouter,
-  useSearchParams,
-  usePathname,
-} from "next/navigation";
+import { useParams, useSearchParams } from "next/navigation";
 import {
   Home,
   BarChart3,
@@ -52,8 +47,17 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { Alert, AlertDescription } from "@/components/ui/alert";
-import type { ScenarioKey } from "@/lib/domain/types";
+import type {
+  HousingAssumptions,
+  HousingType,
+  Id,
+  ScenarioKey,
+} from "@/lib/domain/types";
+import { calcLcc } from "@/lib/calc/lcc";
+import { formatYen } from "@/lib/format";
+import { HOUSING_TYPE_LABELS } from "@/lib/housing";
 import { createRepositories } from "@/lib/repo/factory";
+import type { ScenarioAssumptionsSet } from "@/lib/repo/types";
 import {
   formatScenarioLabel,
   parseScenario,
@@ -62,35 +66,18 @@ import {
 import { useScenarioNavigation } from "@/lib/hooks/useScenarioNavigation";
 import { useTabNavigation } from "@/lib/hooks/useTabNavigation";
 
-// Toggle for empty state testing
-const HAS_HOUSING_ASSUMPTIONS = true;
+const HOUSING_TYPES: HousingType[] = [
+  "high_performance_home",
+  "detached",
+  "condo",
+  "rent",
+];
 
-type HousingType = "high_performance_home" | "detached" | "condo" | "rent";
-
-interface LCCBreakdown {
-  initial: number;
-  loanOrRent: number;
-  tax: number;
-  repairsOrFees: number;
-  utilities: number;
-  other: number;
-}
-
-interface HousingLCC {
-  type: HousingType;
-  name: string;
-  icon: typeof Home;
-  total: number;
-  breakdown: LCCBreakdown;
-  note: string;
-}
-
-const formatYen = (amount: number) => {
-  return new Intl.NumberFormat("ja-JP", {
-    style: "currency",
-    currency: "JPY",
-    maximumFractionDigits: 0,
-  }).format(amount);
+const HOUSING_TYPE_ICONS: Record<HousingType, typeof Home> = {
+  high_performance_home: Home,
+  detached: Building2,
+  condo: Building,
+  rent: KeyRound,
 };
 
 type HorizonYears = "30" | "35" | "40";
@@ -98,9 +85,7 @@ type ChartView = "total" | "annual" | "breakdown";
 
 export default function HousingLCCPage() {
   const params = useParams();
-  const router = useRouter();
   const searchParams = useSearchParams();
-  const pathname = usePathname();
   const planId = params.planId as string;
   const repos = useMemo(() => createRepositories(), []);
   const tabValue = "housing";
@@ -111,354 +96,231 @@ export default function HousingLCCPage() {
   const scenarioParam = searchParams.get("scenario");
   const parsedScenario = parseScenario(scenarioParam);
   const [horizonYears, setHorizonYears] = useState<string>("35");
-  const [selectedType, setSelectedType] = useState<HousingType | null>(
-    "high_performance_home"
-  );
+  const [selectedType, setSelectedType] = useState<HousingType | null>(null);
   const [chartView, setChartView] = useState<ChartView>("total");
+  const [currentVersionId, setCurrentVersionId] = useState<Id | null>(null);
+  const [housingList, setHousingList] = useState<HousingAssumptions[]>([]);
+  const [scenarioSet, setScenarioSet] =
+    useState<ScenarioAssumptionsSet | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [noCurrentVersion, setNoCurrentVersion] = useState(false);
+  const [isSavingSelection, setIsSavingSelection] = useState(false);
 
   useEffect(() => {
     const load = async () => {
       try {
+        setIsLoading(true);
+        setLoadError(null);
+        setNoCurrentVersion(false);
         const plan = await repos.plan.get(planId);
         if (plan?.name) {
           setPlanName(plan.name);
         }
+        const currentVersion = await repos.version.getCurrent(planId);
+        if (!currentVersion) {
+          setNoCurrentVersion(true);
+          setHousingList([]);
+          setScenarioSet(null);
+          setCurrentVersionId(null);
+          setSelectedType(null);
+          return;
+        }
+
+        setCurrentVersionId(currentVersion.id);
+        const ensuredScenarioSet =
+          await repos.version.ensureScenarioSet(currentVersion.id);
+        setScenarioSet(ensuredScenarioSet);
+
+        let list = await repos.housing.listByVersion(currentVersion.id);
+        const missingTypes = HOUSING_TYPES.filter(
+          (type) => !list.some((item) => item.housingType === type),
+        );
+        if (missingTypes.length > 0) {
+          for (const type of missingTypes) {
+            await repos.housing.applyPreset(currentVersion.id, type, "base");
+          }
+          list = await repos.housing.listByVersion(currentVersion.id);
+        }
+
+        const selected = list.find((item) => item.isSelected);
+        if (!selected && list.length > 0) {
+          await repos.housing.setSelected(
+            currentVersion.id,
+            list[0].housingType,
+          );
+          list = await repos.housing.listByVersion(currentVersion.id);
+        }
+
+        setHousingList(list);
+        setSelectedType(list.find((item) => item.isSelected)?.housingType ?? null);
       } catch (error) {
         console.error(error);
+        setLoadError("住宅LCCの読み込みに失敗しました。");
+        setHousingList([]);
+        setScenarioSet(null);
+        setCurrentVersionId(null);
+        setSelectedType(null);
+      } finally {
+        setIsLoading(false);
       }
     };
     void load();
   }, [planId, repos]);
 
-  // Mock LCC data per scenario
-  const mockLCCData: Record<ScenarioKey, HousingLCC[]> = {
-    base: [
-      {
-        type: "high_performance_home",
-        name: "高性能住宅",
-        icon: Home,
-        total: 82500000,
-        breakdown: {
-          initial: 8500000,
-          loanOrRent: 48000000,
-          tax: 5200000,
-          repairsOrFees: 8300000,
-          utilities: 10500000,
-          other: 2000000,
-        },
-        note: "光熱費係数・修繕周期は前提で調整",
-      },
-      {
-        type: "detached",
-        name: "一般戸建",
-        icon: Building2,
-        total: 98000000,
-        breakdown: {
-          initial: 9000000,
-          loanOrRent: 52000000,
-          tax: 6800000,
-          repairsOrFees: 12500000,
-          utilities: 15200000,
-          other: 2500000,
-        },
-        note: "修繕費・光熱費は前提で調整",
-      },
-      {
-        type: "condo",
-        name: "分譲マンション",
-        icon: Building,
-        total: 105000000,
-        breakdown: {
-          initial: 10000000,
-          loanOrRent: 55000000,
-          tax: 7200000,
-          repairsOrFees: 18000000,
-          utilities: 12800000,
-          other: 2000000,
-        },
-        note: "修繕積立金・管理費は前提で調整",
-      },
-      {
-        type: "rent",
-        name: "賃貸",
-        icon: KeyRound,
-        total: 110000000,
-        breakdown: {
-          initial: 1200000,
-          loanOrRent: 92400000,
-          tax: 0,
-          repairsOrFees: 2800000,
-          utilities: 12600000,
-          other: 1000000,
-        },
-        note: "家賃上昇・更新料は前提で調整",
-      },
-    ],
-    conservative: [
-      {
-        type: "high_performance_home",
-        name: "高性能住宅",
-        icon: Home,
-        total: 92000000,
-        breakdown: {
-          initial: 9000000,
-          loanOrRent: 52000000,
-          tax: 6000000,
-          repairsOrFees: 10000000,
-          utilities: 12500000,
-          other: 2500000,
-        },
-        note: "光熱費係数・修繕周期は前提で調整",
-      },
-      {
-        type: "detached",
-        name: "一般戸建",
-        icon: Building2,
-        total: 110000000,
-        breakdown: {
-          initial: 10000000,
-          loanOrRent: 58000000,
-          tax: 7500000,
-          repairsOrFees: 15000000,
-          utilities: 17000000,
-          other: 2500000,
-        },
-        note: "修繕費・光熱費は前提で調整",
-      },
-      {
-        type: "condo",
-        name: "分譲マンション",
-        icon: Building,
-        total: 118000000,
-        breakdown: {
-          initial: 11000000,
-          loanOrRent: 61000000,
-          tax: 8000000,
-          repairsOrFees: 21000000,
-          utilities: 14500000,
-          other: 2500000,
-        },
-        note: "修繕積立金・管理費は前提で調整",
-      },
-      {
-        type: "rent",
-        name: "賃貸",
-        icon: KeyRound,
-        total: 125000000,
-        breakdown: {
-          initial: 1500000,
-          loanOrRent: 105000000,
-          tax: 0,
-          repairsOrFees: 3500000,
-          utilities: 14000000,
-          other: 1000000,
-        },
-        note: "家賃上昇・更新料は前提で調整",
-      },
-    ],
-    optimistic: [
-      {
-        type: "high_performance_home",
-        name: "高性能住宅",
-        icon: Home,
-        total: 75000000,
-        breakdown: {
-          initial: 8000000,
-          loanOrRent: 45000000,
-          tax: 4500000,
-          repairsOrFees: 7000000,
-          utilities: 9000000,
-          other: 1500000,
-        },
-        note: "光熱費係数・修繕周期は前提で調整",
-      },
-      {
-        type: "detached",
-        name: "一般戸建",
-        icon: Building2,
-        total: 88000000,
-        breakdown: {
-          initial: 8500000,
-          loanOrRent: 48000000,
-          tax: 6000000,
-          repairsOrFees: 10500000,
-          utilities: 13500000,
-          other: 1500000,
-        },
-        note: "修繕費・光熱費は前提で調整",
-      },
-      {
-        type: "condo",
-        name: "分譲マンション",
-        icon: Building,
-        total: 95000000,
-        breakdown: {
-          initial: 9500000,
-          loanOrRent: 52000000,
-          tax: 6500000,
-          repairsOrFees: 16000000,
-          utilities: 10000000,
-          other: 1000000,
-        },
-        note: "修繕積立金・管理費は前提で調整",
-      },
-      {
-        type: "rent",
-        name: "賃貸",
-        icon: KeyRound,
-        total: 98000000,
-        breakdown: {
-          initial: 1000000,
-          loanOrRent: 82000000,
-          tax: 0,
-          repairsOrFees: 2500000,
-          utilities: 11500000,
-          other: 1000000,
-        },
-        note: "家賃上昇・更新料は前提で調整",
-      },
-    ],
+  const horizonMonths = Number.parseInt(horizonYears, 10) * 12;
+  const scenario = scenarioSet?.[parsedScenario];
+  const buildScenarioHref = (base: string, params?: Record<string, string>) => {
+    const search = new URLSearchParams(params);
+    search.set("scenario", parsedScenario);
+    return `${base}?${search.toString()}`;
   };
 
-  const currentData = mockLCCData[parsedScenario];
-  const selectedHousing = currentData.find((h) => h.type === selectedType);
+  const lccMap = useMemo(() => {
+    const map = new Map<HousingType, ReturnType<typeof calcLcc>>();
+    for (const item of housingList) {
+      const result = calcLcc({
+        housing: item,
+        scenario,
+        horizonMonths,
+      });
+      map.set(item.housingType, result);
+    }
+    return map;
+  }, [housingList, scenario, horizonMonths]);
 
-  if (!HAS_HOUSING_ASSUMPTIONS) {
+  const orderedHousing = HOUSING_TYPES.map((type) =>
+    housingList.find((item) => item.housingType === type),
+  );
+  const availableHousing = orderedHousing.filter(
+    (item): item is HousingAssumptions => Boolean(item),
+  );
+  const hasSelected = housingList.some((item) => item.isSelected);
+  const selectedTypeForDisplay =
+    selectedType ??
+    housingList.find((item) => item.isSelected)?.housingType ??
+    null;
+  const summaryResult = selectedTypeForDisplay
+    ? lccMap.get(selectedTypeForDisplay)
+    : availableHousing[0]
+    ? lccMap.get(availableHousing[0].housingType)
+    : undefined;
+
+  const handleSelectType = async (type: HousingType) => {
+    if (!currentVersionId || isSavingSelection) return;
+    try {
+      setIsSavingSelection(true);
+      await repos.housing.setSelected(currentVersionId, type);
+      const list = await repos.housing.listByVersion(currentVersionId);
+      setHousingList(list);
+      setSelectedType(type);
+    } catch (error) {
+      console.error(error);
+      setLoadError("住宅タイプの選択に失敗しました。");
+    } finally {
+      setIsSavingSelection(false);
+    }
+  };
+
+  if (isLoading) {
     return (
       <div className="min-h-screen bg-muted/30">
         <div className="mx-auto max-w-6xl p-4 sm:p-6 lg:p-8">
-          {/* Breadcrumb */}
           <nav className="mb-6 flex items-center gap-2 text-sm text-muted-foreground">
             <Link href="/plans" className="hover:text-foreground">
               プラン一覧
             </Link>
             <ChevronRight className="h-4 w-4" />
-            <Link href={`/plans/${planId}`} className="hover:text-foreground">
-              {planName}
-            </Link>
+            <span className="text-foreground">{planName}</span>
             <ChevronRight className="h-4 w-4" />
             <span className="text-foreground">住宅LCC</span>
           </nav>
-
-          {/* Header */}
-          <div className="mb-8">
+          <div className="mb-6">
             <h1 className="mb-2 text-3xl font-bold">
               住宅の生涯コスト（LCC）比較
             </h1>
-            <p className="text-muted-foreground">
-              前提を変えると結果も変わります。単発の答えではなく、見直しながら使う比較です。
-            </p>
+            <p className="text-muted-foreground">読み込み中です…</p>
           </div>
-
-          {/* Navigation Tabs */}
-          <div className="border-b bg-card mb-6">
-            <div className="px-4 sm:px-6">
-              {/* Desktop Tabs */}
-              <div className="hidden sm:block">
-                <Tabs value={tabValue} onValueChange={changeTab}>
-                  <TabsList className="h-auto w-full justify-start rounded-none border-0 bg-transparent p-0">
-                    <TabsTrigger
-                      value="dashboard"
-                      className="gap-2 rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent data-[state=active]:shadow-none"
-                    >
-                      <Home className="h-4 w-4" />
-                      ダッシュボード
-                    </TabsTrigger>
-                    <TabsTrigger
-                      value="monthly"
-                      className="gap-2 rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent data-[state=active]:shadow-none"
-                    >
-                      <Calendar className="h-4 w-4" />
-                      月次
-                    </TabsTrigger>
-                    <TabsTrigger
-                      value="housing"
-                      className="gap-2 rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent data-[state=active]:shadow-none"
-                    >
-                      <Home className="h-4 w-4" />
-                      住宅LCC
-                    </TabsTrigger>
-                    <TabsTrigger
-                      value="events"
-                      className="gap-2 rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent data-[state=active]:shadow-none"
-                    >
-                      <Calendar className="h-4 w-4" />
-                      イベント
-                    </TabsTrigger>
-                    <TabsTrigger
-                      value="versions"
-                      className="gap-2 rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent data-[state=active]:shadow-none"
-                    >
-                      <History className="h-4 w-4" />
-                      見直し（改定）
-                    </TabsTrigger>
-                  </TabsList>
-                </Tabs>
-              </div>
-
-              {/* Mobile Dropdown */}
-              <div className="py-3 sm:hidden">
-                <DropdownMenu>
-                  <DropdownMenuTrigger asChild>
-                    <Button
-                      variant="outline"
-                      className="w-full justify-between bg-transparent"
-                    >
-                      <span className="flex items-center gap-2">
-                        <Home className="h-4 w-4" />
-                        住宅LCC
-                      </span>
-                      <Menu className="h-4 w-4" />
-                    </Button>
-                  </DropdownMenuTrigger>
-                  <DropdownMenuContent className="w-56">
-                    <DropdownMenuItem onSelect={() => changeTab("dashboard")}>
-                      <Home className="mr-2 h-4 w-4" />
-                      ダッシュボード
-                    </DropdownMenuItem>
-                    <DropdownMenuItem onSelect={() => changeTab("monthly")}>
-                      <Calendar className="mr-2 h-4 w-4" />
-                      月次
-                    </DropdownMenuItem>
-                    <DropdownMenuItem onSelect={() => changeTab("housing")}>
-                      <Home className="mr-2 h-4 w-4" />
-                      住宅LCC
-                    </DropdownMenuItem>
-                    <DropdownMenuItem onSelect={() => changeTab("events")}>
-                      <Calendar className="mr-2 h-4 w-4" />
-                      イベント
-                    </DropdownMenuItem>
-                    <DropdownMenuItem onSelect={() => changeTab("versions")}>
-                      <History className="mr-2 h-4 w-4" />
-                      見直し（改定）
-                    </DropdownMenuItem>
-                  </DropdownMenuContent>
-                </DropdownMenu>
-              </div>
-            </div>
+          <div className="grid gap-4 sm:grid-cols-2">
+            {HOUSING_TYPES.map((type) => (
+              <Card key={type} className="animate-pulse">
+                <CardHeader className="pb-3">
+                  <div className="h-4 w-32 rounded bg-muted" />
+                </CardHeader>
+                <CardContent className="space-y-3">
+                  <div className="h-6 w-40 rounded bg-muted" />
+                  <div className="space-y-2">
+                    <div className="h-2 w-full rounded bg-muted" />
+                    <div className="h-2 w-5/6 rounded bg-muted" />
+                    <div className="h-2 w-4/6 rounded bg-muted" />
+                  </div>
+                </CardContent>
+              </Card>
+            ))}
           </div>
+        </div>
+      </div>
+    );
+  }
 
-          {/* Empty State */}
+  if (noCurrentVersion) {
+    return (
+      <div className="min-h-screen bg-muted/30">
+        <div className="mx-auto max-w-6xl p-4 sm:p-6 lg:p-8">
+          <nav className="mb-6 flex items-center gap-2 text-sm text-muted-foreground">
+            <Link href="/plans" className="hover:text-foreground">
+              プラン一覧
+            </Link>
+            <ChevronRight className="h-4 w-4" />
+            <span className="text-foreground">{planName}</span>
+            <ChevronRight className="h-4 w-4" />
+            <span className="text-foreground">住宅LCC</span>
+          </nav>
           <Card className="border-2 border-dashed">
-            <CardContent className="flex min-h-[400px] flex-col items-center justify-center gap-4 p-12 text-center">
+            <CardContent className="flex min-h-[300px] flex-col items-center justify-center gap-4 p-12 text-center">
               <div className="rounded-full bg-muted p-6">
-                <Home className="h-12 w-12 text-muted-foreground" />
+                <AlertTriangle className="h-10 w-10 text-muted-foreground" />
               </div>
               <div>
                 <h3 className="mb-2 text-xl font-semibold">
-                  住宅前提が未設定です
+                  現行バージョンがありません
                 </h3>
                 <p className="mb-6 text-muted-foreground">
-                  まずは住宅タイプを選び、ざっくり前提を設定しましょう
+                  まずは改定履歴から現行バージョンを設定してください。
                 </p>
                 <Button asChild size="lg">
-                  <Link href={`/plans/${planId}/housing/assumptions`}>
-                    前提を設定する
-                  </Link>
+                  <Link href={`/plans/${planId}/versions`}>改定履歴へ</Link>
                 </Button>
               </div>
             </CardContent>
           </Card>
+        </div>
+      </div>
+    );
+  }
+
+  if (loadError) {
+    return (
+      <div className="min-h-screen bg-muted/30">
+        <div className="mx-auto max-w-6xl p-4 sm:p-6 lg:p-8">
+          <nav className="mb-6 flex items-center gap-2 text-sm text-muted-foreground">
+            <Link href="/plans" className="hover:text-foreground">
+              プラン一覧
+            </Link>
+            <ChevronRight className="h-4 w-4" />
+            <span className="text-foreground">{planName}</span>
+            <ChevronRight className="h-4 w-4" />
+            <span className="text-foreground">住宅LCC</span>
+          </nav>
+          <Alert className="mb-6">
+            <AlertTriangle className="h-4 w-4" />
+            <AlertDescription className="ml-2">
+              {loadError}
+            </AlertDescription>
+          </Alert>
+          <Button asChild>
+            <Link href={`/plans/${planId}/housing`}>再読み込み</Link>
+          </Button>
         </div>
       </div>
     );
@@ -523,7 +385,11 @@ export default function HousingLCCPage() {
 
             {/* Assumptions button */}
             <Button asChild>
-              <Link href={`/plans/${planId}/housing/assumptions`}>
+              <Link
+                href={buildScenarioHref(
+                  `/plans/${planId}/housing/assumptions`,
+                )}
+              >
                 <SlidersHorizontal className="mr-2 h-4 w-4" />
                 前提を調整
               </Link>
@@ -619,6 +485,15 @@ export default function HousingLCCPage() {
           </div>
         </div>
 
+        {!hasSelected && (
+          <Alert className="mb-6">
+            <AlertTriangle className="h-4 w-4" />
+            <AlertDescription className="ml-2">
+              比較する住宅タイプが未選択です。
+            </AlertDescription>
+          </Alert>
+        )}
+
         {/* Summary Strip */}
         <Card className="mb-6">
           <CardContent className="flex flex-col items-start justify-between gap-4 p-4 sm:flex-row sm:items-center">
@@ -626,10 +501,12 @@ export default function HousingLCCPage() {
               <span className="text-sm text-muted-foreground">
                 選択中の住宅:
               </span>
-              {selectedType ? (
+              {selectedTypeForDisplay ? (
                 <Badge variant="default" className="gap-1">
                   <CheckCircle2 className="h-3 w-3" />
-                  {currentData.find((h) => h.type === selectedType)?.name}
+                  {selectedTypeForDisplay
+                    ? HOUSING_TYPE_LABELS[selectedTypeForDisplay]
+                    : "未選択"}
                 </Badge>
               ) : (
                 <Badge variant="outline">未選択</Badge>
@@ -642,9 +519,9 @@ export default function HousingLCCPage() {
                 ）:
               </span>
               <span className="text-lg font-bold">
-                {selectedHousing
-                  ? formatYen(selectedHousing.total)
-                  : formatYen(currentData[0].total)}
+                {summaryResult
+                  ? formatYen(summaryResult.summary.totalNominalYen)
+                  : "—"}
                 <span className="ml-1 text-sm font-normal text-muted-foreground">
                   （概算）
                 </span>
@@ -662,11 +539,6 @@ export default function HousingLCCPage() {
             </div>
 
             <div className="flex gap-2">
-              {!selectedType && (
-                <Button size="sm" variant="outline">
-                  住宅タイプを選択
-                </Button>
-              )}
               <Button size="sm" variant="ghost" asChild>
                 <Link href={`/plans/${planId}`}>ダッシュボードへ戻る</Link>
               </Button>
@@ -676,40 +548,83 @@ export default function HousingLCCPage() {
 
         {/* Comparison Cards */}
         <div className="mb-6 grid gap-4 sm:grid-cols-2">
-          {currentData.map((housing) => {
-            const Icon = housing.icon;
-            const isSelected = selectedType === housing.type;
+          {orderedHousing.map((housing, index) => {
+            const housingType = HOUSING_TYPES[index];
+            if (!housing) {
+              return (
+                <Card key={housingType} className="border-dashed">
+                  <CardHeader className="pb-3">
+                    <h3 className="font-semibold">
+                      {HOUSING_TYPE_LABELS[housingType]}
+                    </h3>
+                  </CardHeader>
+                  <CardContent className="space-y-3">
+                    <p className="text-sm text-muted-foreground">
+                      前提が未設定です。
+                    </p>
+                    <Button size="sm" asChild>
+                      <Link
+                        href={buildScenarioHref(
+                          `/plans/${planId}/housing/assumptions`,
+                          { type: housingType },
+                        )}
+                      >
+                        前提を設定する
+                      </Link>
+                    </Button>
+                  </CardContent>
+                </Card>
+              );
+            }
+
+            const Icon = HOUSING_TYPE_ICONS[housing.housingType];
+            const isSelected = housing.isSelected;
+            const lccResult = lccMap.get(housing.housingType);
+            const breakdown = lccResult?.summary.breakdownNominalYen;
+            const total = lccResult?.summary.totalNominalYen ?? 0;
+            const warnings = lccResult?.summary.warnings ?? [];
             const breakdownItems = [
               {
-                label: housing.type === "rent" ? "家賃" : "ローン",
-                value: housing.breakdown.loanOrRent,
-                percent: (housing.breakdown.loanOrRent / housing.total) * 100,
+                label: "初期",
+                value: breakdown?.initial ?? 0,
+              },
+              {
+                label: housing.housingType === "rent" ? "家賃" : "ローン",
+                value: breakdown?.loanOrRent ?? 0,
+              },
+              {
+                label: "税",
+                value: breakdown?.tax ?? 0,
               },
               {
                 label:
-                  housing.type === "condo"
-                    ? "修繕積立/管理費"
-                    : housing.type === "rent"
-                    ? "更新料"
+                  housing.housingType === "condo"
+                    ? "修繕/管理"
+                    : housing.housingType === "rent"
+                    ? "管理"
                     : "修繕",
-                value: housing.breakdown.repairsOrFees,
-                percent:
-                  (housing.breakdown.repairsOrFees / housing.total) * 100,
+                value: breakdown?.repairsOrManagement ?? 0,
               },
               {
-                label: "光熱費",
-                value: housing.breakdown.utilities,
-                percent: (housing.breakdown.utilities / housing.total) * 100,
+                label: "光熱",
+                value: breakdown?.utilities ?? 0,
               },
-            ];
+              {
+                label: housing.housingType === "rent" ? "更新/引越" : "その他",
+                value: breakdown?.other ?? 0,
+              },
+            ].map((item) => ({
+              ...item,
+              percent: total > 0 ? (item.value / total) * 100 : 0,
+            }));
 
             return (
               <Card
-                key={housing.type}
+                key={housing.housingType}
                 className={`cursor-pointer transition-all hover:shadow-md ${
                   isSelected ? "border-primary ring-2 ring-primary/20" : ""
                 }`}
-                onClick={() => setSelectedType(housing.type)}
+                onClick={() => void handleSelectType(housing.housingType)}
               >
                 <CardHeader className="pb-3">
                   <div className="flex items-start justify-between">
@@ -717,7 +632,9 @@ export default function HousingLCCPage() {
                       <div className="rounded-lg bg-primary/10 p-2">
                         <Icon className="h-5 w-5 text-primary" />
                       </div>
-                      <h3 className="font-semibold">{housing.name}</h3>
+                      <h3 className="font-semibold">
+                        {HOUSING_TYPE_LABELS[housing.housingType]}
+                      </h3>
                     </div>
                     <Badge variant={isSelected ? "default" : "secondary"}>
                       {isSelected ? "選択中" : "比較中"}
@@ -728,13 +645,13 @@ export default function HousingLCCPage() {
                   <div>
                     <div className="text-sm text-muted-foreground">累計LCC</div>
                     <div className="text-2xl font-bold">
-                      {formatYen(housing.total)}
+                      {formatYen(lccResult?.summary.totalNominalYen)}
                     </div>
                   </div>
 
                   <div className="space-y-2">
-                    {breakdownItems.map((item, idx) => (
-                      <div key={idx} className="space-y-1">
+                    {breakdownItems.map((item) => (
+                      <div key={item.label} className="space-y-1">
                         <div className="flex justify-between text-xs">
                           <span className="text-muted-foreground">
                             {item.label}
@@ -753,8 +670,13 @@ export default function HousingLCCPage() {
                     ))}
                   </div>
 
+                  {warnings.length > 0 && (
+                    <p className="text-xs text-amber-700">
+                      前提不足（概算）
+                    </p>
+                  )}
                   <p className="text-xs text-muted-foreground">
-                    {housing.note}
+                    前提は編集画面で調整できます。
                   </p>
                 </CardContent>
                 <CardFooter className="flex gap-2 pt-3">
@@ -763,9 +685,10 @@ export default function HousingLCCPage() {
                     variant={isSelected ? "default" : "outline"}
                     onClick={(e) => {
                       e.stopPropagation();
-                      setSelectedType(housing.type);
+                      void handleSelectType(housing.housingType);
                     }}
                     className="flex-1"
+                    disabled={isSavingSelection}
                   >
                     {isSelected ? "選択中" : "このタイプを選択"}
                   </Button>
@@ -775,7 +698,11 @@ export default function HousingLCCPage() {
                     asChild
                     onClick={(e) => e.stopPropagation()}
                   >
-                    <Link href={`/plans/${planId}/housing/${housing.type}`}>
+                    <Link
+                      href={buildScenarioHref(
+                        `/plans/${planId}/housing/${housing.housingType}`,
+                      )}
+                    >
                       詳細
                     </Link>
                   </Button>
@@ -786,7 +713,10 @@ export default function HousingLCCPage() {
                     onClick={(e) => e.stopPropagation()}
                   >
                     <Link
-                      href={`/plans/${planId}/housing/assumptions?type=${housing.type}`}
+                      href={buildScenarioHref(
+                        `/plans/${planId}/housing/assumptions`,
+                        { type: housing.housingType },
+                      )}
                     >
                       前提
                     </Link>
@@ -820,15 +750,19 @@ export default function HousingLCCPage() {
                 </TabsList>
 
                 <TabsContent value="total" className="space-y-3 pt-4">
-                  {currentData.map((housing) => {
-                    const maxTotal = Math.max(
-                      ...currentData.map((h) => h.total)
-                    );
-                    const percent = (housing.total / maxTotal) * 100;
-                    const isSelected = selectedType === housing.type;
+                  {availableHousing.map((housing) => {
+                    const totals = availableHousing
+                      .map((item) => lccMap.get(item.housingType))
+                      .map((item) => item?.summary.totalNominalYen ?? 0);
+                    const maxTotal = Math.max(0, ...totals);
+                    const total = lccMap.get(housing.housingType)?.summary
+                      .totalNominalYen ?? 0;
+                    const percent = maxTotal > 0 ? (total / maxTotal) * 100 : 0;
+                    const isSelected =
+                      selectedTypeForDisplay === housing.housingType;
 
                     return (
-                      <div key={housing.type} className="space-y-1">
+                      <div key={housing.housingType} className="space-y-1">
                         <div className="flex items-center justify-between text-sm">
                           <span
                             className={
@@ -837,10 +771,10 @@ export default function HousingLCCPage() {
                                 : "text-muted-foreground"
                             }
                           >
-                            {housing.name}
+                            {HOUSING_TYPE_LABELS[housing.housingType]}
                           </span>
                           <span className="font-medium">
-                            {formatYen(housing.total)}
+                            {formatYen(total)}
                           </span>
                         </div>
                         <div className="h-8 w-full overflow-hidden rounded-md bg-muted">
@@ -857,19 +791,27 @@ export default function HousingLCCPage() {
                 </TabsContent>
 
                 <TabsContent value="annual" className="space-y-3 pt-4">
-                  {currentData.map((housing) => {
-                    const annualAvg =
-                      housing.total / Number.parseInt(horizonYears);
+                  {availableHousing.map((housing) => {
+                    const total =
+                      lccMap.get(housing.housingType)?.summary.totalNominalYen ??
+                      0;
+                    const annualAvg = total / Number.parseInt(horizonYears, 10);
                     const maxAnnual = Math.max(
-                      ...currentData.map(
-                        (h) => h.total / Number.parseInt(horizonYears)
-                      )
+                      0,
+                      ...availableHousing.map((item) => {
+                        const itemTotal =
+                          lccMap.get(item.housingType)?.summary
+                            .totalNominalYen ?? 0;
+                        return itemTotal / Number.parseInt(horizonYears, 10);
+                      }),
                     );
-                    const percent = (annualAvg / maxAnnual) * 100;
-                    const isSelected = selectedType === housing.type;
+                    const percent =
+                      maxAnnual > 0 ? (annualAvg / maxAnnual) * 100 : 0;
+                    const isSelected =
+                      selectedTypeForDisplay === housing.housingType;
 
                     return (
-                      <div key={housing.type} className="space-y-1">
+                      <div key={housing.housingType} className="space-y-1">
                         <div className="flex items-center justify-between text-sm">
                           <span
                             className={
@@ -878,7 +820,7 @@ export default function HousingLCCPage() {
                                 : "text-muted-foreground"
                             }
                           >
-                            {housing.name}
+                            {HOUSING_TYPE_LABELS[housing.housingType]}
                           </span>
                           <span className="font-medium">
                             {formatYen(annualAvg)}/年
@@ -898,74 +840,89 @@ export default function HousingLCCPage() {
                 </TabsContent>
 
                 <TabsContent value="breakdown" className="space-y-3 pt-4">
-                  {currentData.map((housing) => {
-                    const isSelected = selectedType === housing.type;
+                  {availableHousing.map((housing) => {
+                    const isSelected =
+                      selectedTypeForDisplay === housing.housingType;
+                    const breakdown =
+                      lccMap.get(housing.housingType)?.summary
+                        .breakdownNominalYen;
+                    const total =
+                      lccMap.get(housing.housingType)?.summary.totalNominalYen ??
+                      0;
 
                     return (
-                      <div key={housing.type} className="space-y-1">
+                      <div key={housing.housingType} className="space-y-1">
                         <div className="text-sm font-medium">
-                          {housing.name}
+                          {HOUSING_TYPE_LABELS[housing.housingType]}
                         </div>
                         <div className="flex h-8 w-full overflow-hidden rounded-md">
                           <div
                             className="bg-chart-1"
                             style={{
                               width: `${
-                                (housing.breakdown.loanOrRent / housing.total) *
-                                100
+                                total > 0
+                                  ? ((breakdown?.loanOrRent ?? 0) / total) * 100
+                                  : 0
                               }%`,
                             }}
                             title={`${
-                              housing.type === "rent" ? "家賃" : "ローン"
-                            }: ${formatYen(housing.breakdown.loanOrRent)}`}
+                              housing.housingType === "rent" ? "家賃" : "ローン"
+                            }: ${formatYen(breakdown?.loanOrRent)}`}
                           />
                           <div
                             className="bg-chart-2"
                             style={{
                               width: `${
-                                (housing.breakdown.repairsOrFees /
-                                  housing.total) *
-                                100
+                                total > 0
+                                  ? ((breakdown?.repairsOrManagement ?? 0) /
+                                      total) *
+                                    100
+                                  : 0
                               }%`,
                             }}
                             title={`修繕/管理: ${formatYen(
-                              housing.breakdown.repairsOrFees
+                              breakdown?.repairsOrManagement
                             )}`}
                           />
                           <div
                             className="bg-chart-3"
                             style={{
                               width: `${
-                                (housing.breakdown.utilities / housing.total) *
-                                100
+                                total > 0
+                                  ? ((breakdown?.utilities ?? 0) / total) * 100
+                                  : 0
                               }%`,
                             }}
                             title={`光熱費: ${formatYen(
-                              housing.breakdown.utilities
+                              breakdown?.utilities
                             )}`}
                           />
                           <div
                             className="bg-chart-4"
                             style={{
                               width: `${
-                                (housing.breakdown.tax / housing.total) * 100
+                                total > 0
+                                  ? ((breakdown?.tax ?? 0) / total) * 100
+                                  : 0
                               }%`,
                             }}
-                            title={`税金: ${formatYen(housing.breakdown.tax)}`}
+                            title={`税金: ${formatYen(breakdown?.tax)}`}
                           />
                           <div
                             className="bg-chart-5"
                             style={{
                               width: `${
-                                ((housing.breakdown.initial +
-                                  housing.breakdown.other) /
-                                  housing.total) *
-                                100
+                                total > 0
+                                  ? (((breakdown?.initial ?? 0) +
+                                      (breakdown?.other ?? 0)) /
+                                      total) *
+                                    100
+                                  : 0
                               }%`,
                             }}
                             title={`初期費用他: ${formatYen(
-                              housing.breakdown.initial +
-                                housing.breakdown.other
+                              (breakdown?.initial ?? 0) +
+                                (breakdown?.other ?? 0)
                             )}`}
                           />
                         </div>
@@ -1016,14 +973,12 @@ export default function HousingLCCPage() {
                   <thead>
                     <tr className="border-b">
                       <th className="py-2 text-left font-medium">費目</th>
-                      {currentData.map((housing) => (
+                      {availableHousing.map((housing) => (
                         <th
-                          key={housing.type}
+                          key={housing.housingType}
                           className="py-2 text-right font-medium"
                         >
-                          {housing.name.includes("HOME")
-                            ? "高性能住宅"
-                            : housing.name}
+                          {HOUSING_TYPE_LABELS[housing.housingType]}
                         </th>
                       ))}
                     </tr>
@@ -1031,9 +986,12 @@ export default function HousingLCCPage() {
                   <tbody className="text-xs">
                     <tr className="border-b">
                       <td className="py-2 text-muted-foreground">初期費用</td>
-                      {currentData.map((housing) => (
-                        <td key={housing.type} className="py-2 text-right">
-                          {formatYen(housing.breakdown.initial)}
+                      {availableHousing.map((housing) => (
+                        <td key={housing.housingType} className="py-2 text-right">
+                          {formatYen(
+                            lccMap.get(housing.housingType)?.summary
+                              .breakdownNominalYen.initial,
+                          )}
                         </td>
                       ))}
                     </tr>
@@ -1041,17 +999,23 @@ export default function HousingLCCPage() {
                       <td className="py-2 text-muted-foreground">
                         ローン / 家賃
                       </td>
-                      {currentData.map((housing) => (
-                        <td key={housing.type} className="py-2 text-right">
-                          {formatYen(housing.breakdown.loanOrRent)}
+                      {availableHousing.map((housing) => (
+                        <td key={housing.housingType} className="py-2 text-right">
+                          {formatYen(
+                            lccMap.get(housing.housingType)?.summary
+                              .breakdownNominalYen.loanOrRent,
+                          )}
                         </td>
                       ))}
                     </tr>
                     <tr className="border-b">
                       <td className="py-2 text-muted-foreground">税（概算）</td>
-                      {currentData.map((housing) => (
-                        <td key={housing.type} className="py-2 text-right">
-                          {formatYen(housing.breakdown.tax)}
+                      {availableHousing.map((housing) => (
+                        <td key={housing.housingType} className="py-2 text-right">
+                          {formatYen(
+                            lccMap.get(housing.housingType)?.summary
+                              .breakdownNominalYen.tax,
+                          )}
                         </td>
                       ))}
                     </tr>
@@ -1059,25 +1023,45 @@ export default function HousingLCCPage() {
                       <td className="py-2 text-muted-foreground">
                         修繕 / 管理費
                       </td>
-                      {currentData.map((housing) => (
-                        <td key={housing.type} className="py-2 text-right">
-                          {formatYen(housing.breakdown.repairsOrFees)}
+                      {availableHousing.map((housing) => (
+                        <td key={housing.housingType} className="py-2 text-right">
+                          {formatYen(
+                            lccMap.get(housing.housingType)?.summary
+                              .breakdownNominalYen.repairsOrManagement,
+                          )}
                         </td>
                       ))}
                     </tr>
                     <tr className="border-b">
                       <td className="py-2 text-muted-foreground">光熱費</td>
-                      {currentData.map((housing) => (
-                        <td key={housing.type} className="py-2 text-right">
-                          {formatYen(housing.breakdown.utilities)}
+                      {availableHousing.map((housing) => (
+                        <td key={housing.housingType} className="py-2 text-right">
+                          {formatYen(
+                            lccMap.get(housing.housingType)?.summary
+                              .breakdownNominalYen.utilities,
+                          )}
+                        </td>
+                      ))}
+                    </tr>
+                    <tr className="border-b">
+                      <td className="py-2 text-muted-foreground">その他</td>
+                      {availableHousing.map((housing) => (
+                        <td key={housing.housingType} className="py-2 text-right">
+                          {formatYen(
+                            lccMap.get(housing.housingType)?.summary
+                              .breakdownNominalYen.other,
+                          )}
                         </td>
                       ))}
                     </tr>
                     <tr className="border-t-2 font-semibold">
                       <td className="py-2">合計</td>
-                      {currentData.map((housing) => (
-                        <td key={housing.type} className="py-2 text-right">
-                          {formatYen(housing.total)}
+                      {availableHousing.map((housing) => (
+                        <td key={housing.housingType} className="py-2 text-right">
+                          {formatYen(
+                            lccMap.get(housing.housingType)?.summary
+                              .totalNominalYen,
+                          )}
                         </td>
                       ))}
                     </tr>
@@ -1102,7 +1086,11 @@ export default function HousingLCCPage() {
             </ul>
             <div className="flex gap-2 pt-2">
               <Button size="sm" asChild>
-                <Link href={`/plans/${planId}/housing/assumptions`}>
+                <Link
+                  href={buildScenarioHref(
+                    `/plans/${planId}/housing/assumptions`,
+                  )}
+                >
                   前提を調整
                 </Link>
               </Button>
