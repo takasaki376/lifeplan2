@@ -14,19 +14,28 @@ import { calcTaxSeries } from "./tax";
 import { calcUtilitiesSeries } from "./utilities";
 
 const DEFAULT_HORIZON_MONTHS = 420;
+const MONTH_MIN = 1;
+const MONTH_MAX = 12;
 
 const roundYen = (value: number) => Math.round(value);
 
-const parseYearMonth = (ym: YearMonth) => {
+const parseYearMonth = (ym: YearMonth, warnings: string[]) => {
   const match = /^(\d{4})-(\d{2})$/.exec(ym);
   if (!match) {
+    warnings.push(`Invalid YearMonth format: ${ym}; treated as 0000-01.`);
     return { year: 0, month: 1 };
   }
-  return { year: Number(match[1]), month: Number(match[2]) };
+  const year = Number(match[1]);
+  const month = Number(match[2]);
+  if (month < MONTH_MIN || month > MONTH_MAX) {
+    warnings.push(`Invalid YearMonth range: ${ym} (month must be 01-12); treated as 0000-01.`);
+    return { year: 0, month: 1 };
+  }
+  return { year, month };
 };
 
-const addMonths = (ym: YearMonth, offset: number): YearMonth => {
-  const { year, month } = parseYearMonth(ym);
+const addMonths = (ym: YearMonth, offset: number, warnings: string[]): YearMonth => {
+  const { year, month } = parseYearMonth(ym, warnings);
   const date = new Date(year, month - 1 + offset, 1);
   const nextYear = date.getFullYear();
   const nextMonth = `${date.getMonth() + 1}`.padStart(2, "0");
@@ -126,6 +135,7 @@ const buildMonthTotals = (
     utilities: MoneyYen[];
     other: MoneyYen[];
   },
+  warnings: string[],
 ) => {
   const months = [];
   for (let m = 0; m < horizonMonths; m += 1) {
@@ -139,7 +149,7 @@ const buildMonthTotals = (
       initial + loanOrRent + tax + repairsOrManagement + utilities + other,
     );
     months.push({
-      ym: addMonths(startYm, m),
+      ym: addMonths(startYm, m, warnings),
       initial: roundYen(initial),
       loanOrRent: roundYen(loanOrRent),
       tax: roundYen(tax),
@@ -213,7 +223,7 @@ export const calcLcc = (params: CalcLccParams): CalcLccResult => {
       repairsOrManagement: emptySeries(horizonMonths),
       utilities,
       other: rentSeries.other,
-    });
+    }, warnings);
 
     return {
       housingType: housing.housingType,
@@ -327,7 +337,7 @@ export const calcLcc = (params: CalcLccParams): CalcLccResult => {
     repairsOrManagement,
     utilities,
     other,
-  });
+  }, warnings);
 
   return {
     housingType: housing.housingType,

@@ -68,4 +68,66 @@ describe("lcc calc", () => {
     const month120 = result.series.months[120];
     expect(month120.repairsOrManagement).toBe(1000000);
   });
+
+  it("validates YearMonth and adds warning for invalid month range", () => {
+    const housing: HousingAssumptions = {
+      id: "h-3",
+      planVersionId: "v-3",
+      housingType: "rent",
+      isSelected: false,
+      utilitiesBaseMonthlyYen: 0,
+      utilitiesFactor: 1,
+      createdAt: "2026-01-01",
+      updatedAt: "2026-01-01",
+      typeSpecific: {
+        rentMonthlyYen: 100000,
+        renewalFeeYen: 0,
+        renewalCycleYears: 2,
+        movingCostYen: 0,
+      },
+    };
+
+    // Test with invalid month (99)
+    const result = calcLcc({
+      housing,
+      horizonMonths: 3,
+      startYm: "2026-99" as any,
+    });
+    
+    // Should have a warning about invalid month range
+    expect(result.summary.warnings).toContain(
+      "Invalid YearMonth range: 2026-99 (month must be 01-12); treated as 0000-01."
+    );
+  });
+
+  it("validates YearMonth and adds warning for invalid format", () => {
+    const housing: HousingAssumptions = {
+      id: "h-4",
+      planVersionId: "v-4",
+      housingType: "rent",
+      isSelected: false,
+      utilitiesBaseMonthlyYen: 0,
+      utilitiesFactor: 1,
+      createdAt: "2026-01-01",
+      updatedAt: "2026-01-01",
+      typeSpecific: {
+        rentMonthlyYen: 100000,
+        renewalFeeYen: 0,
+        renewalCycleYears: 2,
+        movingCostYen: 0,
+      },
+    };
+
+    // Test with invalid format
+    const result = calcLcc({
+      housing,
+      horizonMonths: 3,
+      startYm: "invalid" as any,
+    });
+    
+    // Should have a warning about invalid format
+    expect(result.summary.warnings).toContain(
+      "Invalid YearMonth format: invalid; treated as 0000-01."
+    );
+  });
 });
