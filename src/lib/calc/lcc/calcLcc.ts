@@ -27,12 +27,7 @@ const parseYearMonth = (ym: YearMonth, warnings: string[]) => {
   }
   const year = Number(match[1]);
   const month = Number(match[2]);
-  if (
-    !Number.isFinite(year) ||
-    !Number.isFinite(month) ||
-    month < MONTH_MIN ||
-    month > MONTH_MAX
-  ) {
+  if (month < MONTH_MIN || month > MONTH_MAX) {
     warnings.push(`Invalid YearMonth range: ${ym} (month must be 01-12); treated as 0000-01.`);
     return { year: 0, month: 1 };
   }
