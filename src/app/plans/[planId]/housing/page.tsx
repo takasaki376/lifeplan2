@@ -145,11 +145,13 @@ export default function HousingLCCPage() {
 
         const selected = list.find((item) => item.isSelected);
         if (!selected && list.length > 0) {
-          await repos.housing.setSelected(
-            currentVersion.id,
-            list[0].housingType,
+          const defaultType = HOUSING_TYPES.find((type) =>
+            list.some((item) => item.housingType === type),
           );
-          list = await repos.housing.listByVersion(currentVersion.id);
+          if (defaultType) {
+            await repos.housing.setSelected(currentVersion.id, defaultType);
+            list = await repos.housing.listByVersion(currentVersion.id);
+          }
         }
 
         setHousingList(list);
