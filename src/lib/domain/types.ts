@@ -39,6 +39,7 @@ export interface ScenarioAssumptions {
   scenarioKey: ScenarioKey;
   wageGrowthRate?: number; // 0.02
   inflationRate?: number; // 0.01
+  utilitiesIncreaseRateAnnual?: number;
   investmentReturnRate?: number; // 0.03
   createdAt: ISODate;
 }

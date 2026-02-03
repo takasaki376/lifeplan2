@@ -169,10 +169,12 @@ export const calcLcc = (params: CalcLccParams): CalcLccResult => {
     warnings,
     "utilitiesFactor",
   );
+  const utilitiesIncreaseRate =
+    params.scenario?.utilitiesIncreaseRateAnnual ?? inflationRate;
   const utilities = calcUtilitiesSeries({
     baseMonthlyYen: utilitiesBase,
     utilitiesFactor,
-    inflationRateAnnual: inflationRate,
+    inflationRateAnnual: utilitiesIncreaseRate,
     horizonMonths,
   });
 

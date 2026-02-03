@@ -26,6 +26,7 @@ import {
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Separator } from "@/components/ui/separator";
 import type { HouseholdType, HousingType } from "@/lib/domain/types";
+import { getHousingTypeLabel } from "@/lib/housing";
 import { createRepositories } from "@/lib/repo/factory";
 import { createPlanWizard } from "@/lib/usecases/createPlanWizard";
 
@@ -172,11 +173,6 @@ export default function PlanCreationWizard() {
       other: "その他",
     };
     return labels[type] || type;
-  };
-
-  const getHousingTypeLabel = (type: string) => {
-    const option = housingOptions.find((opt) => opt.value === type);
-    return option?.title || type;
   };
 
   return (

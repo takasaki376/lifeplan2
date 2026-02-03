@@ -16,11 +16,14 @@ import type {
   MonthlyRecord,
   Plan,
   PlanVersion,
+  ScenarioAssumptions,
 } from "@/lib/domain/types";
+import type { ScenarioAssumptionsSet } from "@/lib/repo/types";
 import PlanDashboardPage from "./page";
 
 const planGetMock = vi.fn();
 const versionGetCurrentMock = vi.fn();
+const versionGetScenarioSetMock = vi.fn();
 const monthlyGetByYmMock = vi.fn();
 const housingListByVersionMock = vi.fn();
 const eventListByVersionMock = vi.fn();
@@ -61,6 +64,7 @@ vi.mock("@/lib/repo/factory", () => ({
     },
     version: {
       getCurrent: versionGetCurrentMock,
+      getScenarioSet: versionGetScenarioSetMock,
     },
     monthly: {
       getByYm: monthlyGetByYmMock,
@@ -181,6 +185,26 @@ const makeEvent = (
   ...overrides,
 });
 
+const makeScenario = (
+  planVersionId: string,
+  scenarioKey: ScenarioAssumptions["scenarioKey"]
+): ScenarioAssumptions => ({
+  id: `${planVersionId}-${scenarioKey}`,
+  planVersionId,
+  scenarioKey,
+  wageGrowthRate: 0.02,
+  inflationRate: 0.03,
+  utilitiesIncreaseRateAnnual: 0.03,
+  investmentReturnRate: 0.05,
+  createdAt: "2026-01-01T00:00:00.000Z",
+});
+
+const makeScenarioSet = (planVersionId: string): ScenarioAssumptionsSet => ({
+  conservative: makeScenario(planVersionId, "conservative"),
+  base: makeScenario(planVersionId, "base"),
+  optimistic: makeScenario(planVersionId, "optimistic"),
+});
+
 describe("PlanDashboardPage", () => {
   beforeAll(() => {
     if (!("ResizeObserver" in globalThis)) {
@@ -214,6 +238,7 @@ describe("PlanDashboardPage", () => {
   beforeEach(() => {
     planGetMock.mockReset();
     versionGetCurrentMock.mockReset();
+    versionGetScenarioSetMock.mockReset();
     monthlyGetByYmMock.mockReset();
     housingListByVersionMock.mockReset();
     eventListByVersionMock.mockReset();
@@ -225,6 +250,7 @@ describe("PlanDashboardPage", () => {
     versionGetCurrentMock.mockResolvedValue(
       makeVersion({ id: "ver-1", planId: "plan-123", versionNo: 1 })
     );
+    versionGetScenarioSetMock.mockResolvedValue(makeScenarioSet("ver-1"));
     monthlyGetByYmMock.mockResolvedValue(makeMonthly("plan-123"));
     housingListByVersionMock.mockResolvedValue([]);
     eventListByVersionMock.mockResolvedValue([]);

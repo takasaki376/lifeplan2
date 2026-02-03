@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import { useState } from "react";
 import { useRouter, useParams } from "next/navigation";
@@ -49,8 +49,8 @@ import {
   AccordionTrigger,
 } from "@/components/ui/accordion";
 import { Badge } from "@/components/ui/badge";
-import type { ScenarioKey, ScenarioPreset } from "@/lib/domain/types";
-// import { useToast } from "@/hooks/use-toast";
+import type { ScenarioPreset } from "@/lib/domain/types";
+import { HOUSING_TYPE_LABELS } from "@/lib/housing";
 import { toast } from "sonner";
 
 // Toggle this to simulate first-time vs existing assumptions state
@@ -92,12 +92,24 @@ interface Assumptions {
 const HOUSING_TYPES = [
   {
     id: "high_performance_home" as HousingType,
-    label: "高性能住宅",
+    label: HOUSING_TYPE_LABELS.high_performance_home,
     icon: Home,
   },
-  { id: "detached" as HousingType, label: "一般戸建", icon: Home },
-  { id: "condo" as HousingType, label: "分譲マンション", icon: Building2 },
-  { id: "rent" as HousingType, label: "賃貸", icon: Building },
+  {
+    id: "detached" as HousingType,
+    label: HOUSING_TYPE_LABELS.detached,
+    icon: Home,
+  },
+  {
+    id: "condo" as HousingType,
+    label: HOUSING_TYPE_LABELS.condo,
+    icon: Building2,
+  },
+  {
+    id: "rent" as HousingType,
+    label: HOUSING_TYPE_LABELS.rent,
+    icon: Building,
+  },
 ];
 
 const DEFAULT_ASSUMPTIONS: Record<HousingType, Assumptions> = {
@@ -173,16 +185,14 @@ export default function HousingAssumptionsPage() {
 
   const planId = params.planId as string;
   const [activeType, setActiveType] = useState<HousingType>(
-    "high_performance_home"
+    "high_performance_home",
   );
   const [editMode, setEditMode] = useState<EditMode>("simple");
-  const [scenario, setScenario] = useState<ScenarioKey>("base");
   const [horizonYears, setHorizonYears] = useState(35);
   const [isDirty, setIsDirty] = useState(false);
   const [assumptions, setAssumptions] =
     useState<Record<HousingType, Assumptions>>(DEFAULT_ASSUMPTIONS);
-  const [selectedPreset, setSelectedPreset] =
-    useState<ScenarioPreset>("base");
+  const [selectedPreset, setSelectedPreset] = useState<ScenarioPreset>("base");
 
   const currentAssumptions = assumptions[activeType];
 
@@ -284,7 +294,7 @@ export default function HousingAssumptionsPage() {
 
   const updateAssumption = (
     key: keyof Assumptions,
-    value: Assumptions[keyof Assumptions]
+    value: Assumptions[keyof Assumptions],
   ) => {
     setAssumptions((prev) => ({
       ...prev,
@@ -307,7 +317,7 @@ export default function HousingAssumptionsPage() {
         interestRate: baseAssumptions.interestRate * multiplier,
         propertyTax: Math.round(baseAssumptions.propertyTax * multiplier),
         repairCostYearly: Math.round(
-          baseAssumptions.repairCostYearly * multiplier
+          baseAssumptions.repairCostYearly * multiplier,
         ),
         utilityBase: Math.round(baseAssumptions.utilityBase * multiplier),
         managementFee: baseAssumptions.managementFee
@@ -381,7 +391,7 @@ export default function HousingAssumptionsPage() {
   const updateRepairItem = (
     id: string,
     key: keyof RepairItem,
-    value: RepairItem[keyof RepairItem]
+    value: RepairItem[keyof RepairItem],
   ) => {
     setAssumptions((prev) => ({
       ...prev,
@@ -389,7 +399,7 @@ export default function HousingAssumptionsPage() {
         ...prev[activeType],
         repairSchedule:
           prev[activeType].repairSchedule?.map((item) =>
-            item.id === id ? { ...item, [key]: value } : item
+            item.id === id ? { ...item, [key]: value } : item,
           ) || [],
       },
     }));
@@ -589,7 +599,7 @@ export default function HousingAssumptionsPage() {
                               onChange={(e) =>
                                 updateAssumption(
                                   "initialCost",
-                                  Number(e.target.value)
+                                  Number(e.target.value),
                                 )
                               }
                               className="pr-12"
@@ -623,7 +633,7 @@ export default function HousingAssumptionsPage() {
                                   onChange={(e) =>
                                     updateAssumption(
                                       "rent",
-                                      Number(e.target.value)
+                                      Number(e.target.value),
                                     )
                                   }
                                   className="pr-12"
@@ -646,7 +656,7 @@ export default function HousingAssumptionsPage() {
                                   onChange={(e) =>
                                     updateAssumption(
                                       "rentIncrease",
-                                      Number(e.target.value)
+                                      Number(e.target.value),
                                     )
                                   }
                                   className="pr-12"
@@ -666,7 +676,7 @@ export default function HousingAssumptionsPage() {
                                   onChange={(e) =>
                                     updateAssumption(
                                       "renewalFee",
-                                      Number(e.target.value)
+                                      Number(e.target.value),
                                     )
                                   }
                                   className="pr-12"
@@ -686,7 +696,7 @@ export default function HousingAssumptionsPage() {
                                   onChange={(e) =>
                                     updateAssumption(
                                       "renewalCycle",
-                                      Number(e.target.value)
+                                      Number(e.target.value),
                                     )
                                   }
                                   className="pr-12"
@@ -706,7 +716,7 @@ export default function HousingAssumptionsPage() {
                                   onChange={(e) =>
                                     updateAssumption(
                                       "movingCost",
-                                      Number(e.target.value)
+                                      Number(e.target.value),
                                     )
                                   }
                                   className="pr-12"
@@ -737,7 +747,7 @@ export default function HousingAssumptionsPage() {
                                   onChange={(e) =>
                                     updateAssumption(
                                       "loanAmount",
-                                      Number(e.target.value)
+                                      Number(e.target.value),
                                     )
                                   }
                                   className="pr-12"
@@ -758,7 +768,7 @@ export default function HousingAssumptionsPage() {
                                   onChange={(e) =>
                                     updateAssumption(
                                       "interestRate",
-                                      Number(e.target.value)
+                                      Number(e.target.value),
                                     )
                                   }
                                   className="pr-12"
@@ -778,7 +788,7 @@ export default function HousingAssumptionsPage() {
                                   onChange={(e) =>
                                     updateAssumption(
                                       "loanYears",
-                                      Number(e.target.value)
+                                      Number(e.target.value),
                                     )
                                   }
                                   className="pr-12"
@@ -811,7 +821,7 @@ export default function HousingAssumptionsPage() {
                                   onChange={(e) =>
                                     updateAssumption(
                                       "managementFee",
-                                      Number(e.target.value)
+                                      Number(e.target.value),
                                     )
                                   }
                                   className="pr-12"
@@ -833,7 +843,7 @@ export default function HousingAssumptionsPage() {
                                   onChange={(e) =>
                                     updateAssumption(
                                       "repairReserve",
-                                      Number(e.target.value)
+                                      Number(e.target.value),
                                     )
                                   }
                                   className="pr-12"
@@ -853,7 +863,7 @@ export default function HousingAssumptionsPage() {
                                   onChange={(e) =>
                                     updateAssumption(
                                       "parkingFee",
-                                      Number(e.target.value)
+                                      Number(e.target.value),
                                     )
                                   }
                                   className="pr-12"
@@ -885,7 +895,7 @@ export default function HousingAssumptionsPage() {
                                   onChange={(e) =>
                                     updateAssumption(
                                       "loanAmount",
-                                      Number(e.target.value)
+                                      Number(e.target.value),
                                     )
                                   }
                                   className="pr-12"
@@ -906,7 +916,7 @@ export default function HousingAssumptionsPage() {
                                   onChange={(e) =>
                                     updateAssumption(
                                       "interestRate",
-                                      Number(e.target.value)
+                                      Number(e.target.value),
                                     )
                                   }
                                   className="pr-12"
@@ -926,7 +936,7 @@ export default function HousingAssumptionsPage() {
                                   onChange={(e) =>
                                     updateAssumption(
                                       "loanYears",
-                                      Number(e.target.value)
+                                      Number(e.target.value),
                                     )
                                   }
                                   className="pr-12"
@@ -959,7 +969,7 @@ export default function HousingAssumptionsPage() {
                                   onChange={(e) =>
                                     updateAssumption(
                                       "repairCostYearly",
-                                      Number(e.target.value)
+                                      Number(e.target.value),
                                     )
                                   }
                                   className="pr-12"
@@ -996,7 +1006,7 @@ export default function HousingAssumptionsPage() {
                                   onChange={(e) =>
                                     updateAssumption(
                                       "propertyTax",
-                                      Number(e.target.value)
+                                      Number(e.target.value),
                                     )
                                   }
                                   className="pr-12"
@@ -1030,7 +1040,7 @@ export default function HousingAssumptionsPage() {
                               onChange={(e) =>
                                 updateAssumption(
                                   "utilityBase",
-                                  Number(e.target.value)
+                                  Number(e.target.value),
                                 )
                               }
                               className="pr-12"
@@ -1051,7 +1061,7 @@ export default function HousingAssumptionsPage() {
                               onChange={(e) =>
                                 updateAssumption(
                                   "utilityCoefficient",
-                                  Number(e.target.value)
+                                  Number(e.target.value),
                                 )
                               }
                             />
@@ -1100,7 +1110,7 @@ export default function HousingAssumptionsPage() {
                                 onChange={(e) =>
                                   updateAssumption(
                                     "downPayment",
-                                    Number(e.target.value)
+                                    Number(e.target.value),
                                   )
                                 }
                                 className="pr-12"
@@ -1120,7 +1130,7 @@ export default function HousingAssumptionsPage() {
                                 onChange={(e) =>
                                   updateAssumption(
                                     "fees",
-                                    Number(e.target.value)
+                                    Number(e.target.value),
                                   )
                                 }
                                 className="pr-12"
@@ -1140,7 +1150,7 @@ export default function HousingAssumptionsPage() {
                                 onChange={(e) =>
                                   updateAssumption(
                                     "initialCost",
-                                    Number(e.target.value)
+                                    Number(e.target.value),
                                   )
                                 }
                                 className="pr-12"
@@ -1176,7 +1186,7 @@ export default function HousingAssumptionsPage() {
                                   onChange={(e) =>
                                     updateAssumption(
                                       "loanAmount",
-                                      Number(e.target.value)
+                                      Number(e.target.value),
                                     )
                                   }
                                   className="pr-12"
@@ -1197,7 +1207,7 @@ export default function HousingAssumptionsPage() {
                                   onChange={(e) =>
                                     updateAssumption(
                                       "interestRate",
-                                      Number(e.target.value)
+                                      Number(e.target.value),
                                     )
                                   }
                                   className="pr-12"
@@ -1217,7 +1227,7 @@ export default function HousingAssumptionsPage() {
                                   onChange={(e) =>
                                     updateAssumption(
                                       "loanYears",
-                                      Number(e.target.value) / 12
+                                      Number(e.target.value) / 12,
                                     )
                                   }
                                   className="pr-12"
@@ -1272,7 +1282,7 @@ export default function HousingAssumptionsPage() {
                                   onChange={(e) =>
                                     updateAssumption(
                                       "propertyTax",
-                                      Number(e.target.value)
+                                      Number(e.target.value),
                                     )
                                   }
                                   className="pr-12"
@@ -1298,8 +1308,8 @@ export default function HousingAssumptionsPage() {
                               {activeType === "condo"
                                 ? "管理・修繕"
                                 : activeType === "rent"
-                                ? "家賃"
-                                : "修繕"}
+                                  ? "家賃"
+                                  : "修繕"}
                             </span>
                           </div>
                         </AccordionTrigger>
@@ -1316,7 +1326,7 @@ export default function HousingAssumptionsPage() {
                                     onChange={(e) =>
                                       updateAssumption(
                                         "rent",
-                                        Number(e.target.value)
+                                        Number(e.target.value),
                                       )
                                     }
                                     className="pr-12"
@@ -1339,7 +1349,7 @@ export default function HousingAssumptionsPage() {
                                     onChange={(e) =>
                                       updateAssumption(
                                         "rentIncrease",
-                                        Number(e.target.value)
+                                        Number(e.target.value),
                                       )
                                     }
                                     className="pr-12"
@@ -1359,7 +1369,7 @@ export default function HousingAssumptionsPage() {
                                     onChange={(e) =>
                                       updateAssumption(
                                         "renewalFee",
-                                        Number(e.target.value)
+                                        Number(e.target.value),
                                       )
                                     }
                                     className="pr-12"
@@ -1381,7 +1391,7 @@ export default function HousingAssumptionsPage() {
                                     onChange={(e) =>
                                       updateAssumption(
                                         "renewalCycle",
-                                        Number(e.target.value)
+                                        Number(e.target.value),
                                       )
                                     }
                                     className="pr-12"
@@ -1401,7 +1411,7 @@ export default function HousingAssumptionsPage() {
                                     onChange={(e) =>
                                       updateAssumption(
                                         "movingCost",
-                                        Number(e.target.value)
+                                        Number(e.target.value),
                                       )
                                     }
                                     className="pr-12"
@@ -1428,7 +1438,7 @@ export default function HousingAssumptionsPage() {
                                     onChange={(e) =>
                                       updateAssumption(
                                         "managementFee",
-                                        Number(e.target.value)
+                                        Number(e.target.value),
                                       )
                                     }
                                     className="pr-12"
@@ -1452,7 +1462,7 @@ export default function HousingAssumptionsPage() {
                                     onChange={(e) =>
                                       updateAssumption(
                                         "repairReserve",
-                                        Number(e.target.value)
+                                        Number(e.target.value),
                                       )
                                     }
                                     className="pr-12"
@@ -1474,7 +1484,7 @@ export default function HousingAssumptionsPage() {
                                     onChange={(e) =>
                                       updateAssumption(
                                         "parkingFee",
-                                        Number(e.target.value)
+                                        Number(e.target.value),
                                       )
                                     }
                                     className="pr-12"
@@ -1515,7 +1525,7 @@ export default function HousingAssumptionsPage() {
                                               updateRepairItem(
                                                 item.id,
                                                 "cycle",
-                                                Number(e.target.value)
+                                                Number(e.target.value),
                                               )
                                             }
                                           />
@@ -1529,7 +1539,7 @@ export default function HousingAssumptionsPage() {
                                               updateRepairItem(
                                                 item.id,
                                                 "amount",
-                                                Number(e.target.value)
+                                                Number(e.target.value),
                                               )
                                             }
                                           />
@@ -1542,7 +1552,7 @@ export default function HousingAssumptionsPage() {
                                               updateRepairItem(
                                                 item.id,
                                                 "memo",
-                                                e.target.value
+                                                e.target.value,
                                               )
                                             }
                                           />
@@ -1560,7 +1570,7 @@ export default function HousingAssumptionsPage() {
                                           </Button>
                                         </div>
                                       </div>
-                                    )
+                                    ),
                                   )}
                                 </div>
                               </div>
@@ -1595,7 +1605,7 @@ export default function HousingAssumptionsPage() {
                                               updateRepairItem(
                                                 item.id,
                                                 "cycle",
-                                                Number(e.target.value)
+                                                Number(e.target.value),
                                               )
                                             }
                                           />
@@ -1609,7 +1619,7 @@ export default function HousingAssumptionsPage() {
                                               updateRepairItem(
                                                 item.id,
                                                 "amount",
-                                                Number(e.target.value)
+                                                Number(e.target.value),
                                               )
                                             }
                                           />
@@ -1622,7 +1632,7 @@ export default function HousingAssumptionsPage() {
                                               updateRepairItem(
                                                 item.id,
                                                 "memo",
-                                                e.target.value
+                                                e.target.value,
                                               )
                                             }
                                           />
@@ -1640,7 +1650,7 @@ export default function HousingAssumptionsPage() {
                                           </Button>
                                         </div>
                                       </div>
-                                    )
+                                    ),
                                   )}
                                 </div>
                               </div>
@@ -1673,7 +1683,7 @@ export default function HousingAssumptionsPage() {
                                 onChange={(e) =>
                                   updateAssumption(
                                     "utilityBase",
-                                    Number(e.target.value)
+                                    Number(e.target.value),
                                   )
                                 }
                                 className="pr-12"
@@ -1695,7 +1705,7 @@ export default function HousingAssumptionsPage() {
                               onChange={(e) =>
                                 updateAssumption(
                                   "utilityCoefficient",
-                                  Number(e.target.value)
+                                  Number(e.target.value),
                                 )
                               }
                             />
