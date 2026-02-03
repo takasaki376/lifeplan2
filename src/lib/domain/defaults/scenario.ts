@@ -1,4 +1,4 @@
-import type { ScenarioAssumptions, ScenarioKey } from "../types";
+﻿import type { ScenarioAssumptions, ScenarioKey } from "../types";
 
 export type ScenarioDefaultsInput = Omit<
   ScenarioAssumptions,
@@ -12,6 +12,7 @@ export const DEFAULT_SCENARIO_SET: Record<ScenarioKey, ScenarioDefaultsInput> =
       scenarioKey: "conservative",
       wageGrowthRate: 0.01, // 賃金上昇率
       inflationRate: 0.03, // インフレ率
+      utilitiesIncreaseRateAnnual: 0.03, // 光熱費上昇率
       investmentReturnRate: 0.04, // 投資リターン率
     },
     base: {
@@ -19,6 +20,7 @@ export const DEFAULT_SCENARIO_SET: Record<ScenarioKey, ScenarioDefaultsInput> =
       scenarioKey: "base",
       wageGrowthRate: 0.02, // 賃金上昇率
       inflationRate: 0.03, // インフレ率
+      utilitiesIncreaseRateAnnual: 0.04, // 光熱費上昇率
       investmentReturnRate: 0.07, // 投資リターン率
     },
     optimistic: {
@@ -26,6 +28,7 @@ export const DEFAULT_SCENARIO_SET: Record<ScenarioKey, ScenarioDefaultsInput> =
       scenarioKey: "optimistic",
       wageGrowthRate: 0.03, // 賃金上昇率
       inflationRate: 0.03, // インフレ率
+      utilitiesIncreaseRateAnnual: 0.05, // 光熱費上昇率
       investmentReturnRate: 0.01, // 投資リターン率
     },
   };

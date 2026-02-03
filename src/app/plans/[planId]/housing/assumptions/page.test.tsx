@@ -1,6 +1,7 @@
 import React from "react";
 import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import { cleanup, render, screen } from "@testing-library/react";
+import { HOUSING_TYPE_LABELS } from "@/lib/housing";
 import HousingAssumptionsPage from "./page";
 
 const pushMock = vi.fn();
@@ -62,5 +63,22 @@ describe("HousingAssumptionsPage", () => {
 
     const tabs = screen.getAllByRole("tab");
     expect(tabs.length).toBeGreaterThanOrEqual(6);
+  });
+
+  it("renders housing type labels from shared constants", () => {
+    render(<HousingAssumptionsPage />);
+
+    expect(
+      screen.getAllByText(HOUSING_TYPE_LABELS.high_performance_home).length
+    ).toBeGreaterThan(0);
+    expect(
+      screen.getAllByText(HOUSING_TYPE_LABELS.detached).length
+    ).toBeGreaterThan(0);
+    expect(screen.getAllByText(HOUSING_TYPE_LABELS.condo).length).toBeGreaterThan(
+      0
+    );
+    expect(screen.getAllByText(HOUSING_TYPE_LABELS.rent).length).toBeGreaterThan(
+      0
+    );
   });
 });

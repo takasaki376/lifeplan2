@@ -1,13 +1,8 @@
-"use client";
+﻿"use client";
 
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import {
-  useParams,
-  useRouter,
-  useSearchParams,
-  usePathname,
-} from "next/navigation";
+import { useParams, useSearchParams } from "next/navigation";
 import {
   Home,
   Calendar,
@@ -42,6 +37,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { formatYearMonth, formatYen, getCurrentYearMonth } from "@/lib/format";
+import { getHousingTypeLabel } from "@/lib/housing";
 import type {
   HousingAssumptions,
   LifeEvent,
@@ -52,6 +48,7 @@ import type {
 import type { EventTypeKey } from "@/lib/domain/eventTypes";
 import { createRepositories } from "@/lib/repo/factory";
 import { EVENT_TYPE_LABELS } from "@/lib/domain/eventTypes";
+import { DEFAULT_SCENARIO_SET } from "@/lib/domain/defaults/scenario";
 import {
   formatScenarioLabel,
   parseScenario,
@@ -61,6 +58,8 @@ import type { ScenarioKey } from "@/lib/scenario";
 import { useScenarioNavigation } from "@/lib/hooks/useScenarioNavigation";
 import { useTabNavigation } from "@/lib/hooks/useTabNavigation";
 import { computeNextActions, REQUIRED_HOUSING_TYPES } from "@/lib/dashboard";
+import { calcLcc } from "@/lib/calc/lcc/calcLcc";
+import type { ScenarioAssumptionsSet } from "@/lib/repo/types";
 
 type DashboardState =
   | "FIRST_TIME"
@@ -71,9 +70,7 @@ type DashboardState =
 
 export default function PlanDashboardPage() {
   const params = useParams();
-  const router = useRouter();
   const searchParams = useSearchParams();
-  const pathname = usePathname();
   const planId = params.planId as string;
   const repos = useMemo(() => createRepositories(), []);
   const currentYm = getCurrentYearMonth();
@@ -82,14 +79,19 @@ export default function PlanDashboardPage() {
 
   const [plan, setPlan] = useState<Plan | null>(null);
   const [currentVersion, setCurrentVersion] = useState<PlanVersion | null>(
-    null
+    null,
   );
   const [currentMonthly, setCurrentMonthly] = useState<MonthlyRecord | null>(
-    null
+    null,
   );
   const [housingAssumptions, setHousingAssumptions] = useState<
     HousingAssumptions[]
   >([]);
+  const [scenarioSet, setScenarioSet] = useState<ScenarioAssumptionsSet | null>(
+    null,
+  );
+  const [scenarioError, setScenarioError] = useState<string | null>(null);
+  const [scenarioLoading, setScenarioLoading] = useState(false);
   const [upcomingEvents, setUpcomingEvents] = useState<LifeEvent[]>([]);
   const [upcomingEventCount, setUpcomingEventCount] = useState(0);
   const [eventCount, setEventCount] = useState(0);
@@ -155,7 +157,7 @@ export default function PlanDashboardPage() {
   const resolveDashboardState = (
     monthly: MonthlyRecord | null | undefined,
     housing: HousingAssumptions[],
-    eventsLength: number
+    eventsLength: number,
   ): DashboardState => {
     if (!monthly) return "FIRST_TIME";
     if (housing.length < REQUIRED_HOUSING_TYPES) return "NEEDS_HOUSING";
@@ -173,6 +175,9 @@ export default function PlanDashboardPage() {
       setCurrentVersion(null);
       setCurrentMonthly(null);
       setHousingAssumptions([]);
+      setScenarioSet(null);
+      setScenarioError(null);
+      setScenarioLoading(true);
       setUpcomingEvents([]);
       setUpcomingEventCount(0);
       setEventCount(0);
@@ -189,6 +194,8 @@ export default function PlanDashboardPage() {
         if (!planData) {
           if (!active) return;
           setLoadError("プランが見つかりません");
+          setScenarioLoading(false);
+          setScenarioSet(null);
           return;
         }
 
@@ -199,6 +206,8 @@ export default function PlanDashboardPage() {
           setCurrentVersion(null);
           setEventVersionMissing(true);
           setEventLoading(false);
+          setScenarioLoading(false);
+          setScenarioSet(null);
           const monthly = await repos.monthly.getByYm(planId, currentYm);
           if (!active) return;
           setCurrentMonthly(monthly ?? null);
@@ -214,6 +223,18 @@ export default function PlanDashboardPage() {
           repos.monthly.getByYm(planId, currentYm),
           repos.housing.listByVersion(versionData.id),
         ]);
+
+        let scenario: ScenarioAssumptionsSet | null = null;
+        try {
+          scenario = await repos.version.getScenarioSet(versionData.id);
+          setScenarioError(null);
+        } catch (error) {
+          console.error(error);
+          if (!active) return;
+          setScenarioError("シナリオ前提の取得に失敗しました");
+        } finally {
+          setScenarioLoading(false);
+        }
 
         let events: LifeEvent[] = [];
         try {
@@ -233,6 +254,7 @@ export default function PlanDashboardPage() {
         if (!active) return;
         setCurrentMonthly(monthly ?? null);
         setHousingAssumptions(housing);
+        setScenarioSet(scenario);
         const upcoming = events
           .filter((event) => event.startYm >= currentYm)
           .sort((a, b) => a.startYm.localeCompare(b.startYm));
@@ -240,7 +262,7 @@ export default function PlanDashboardPage() {
         setUpcomingEvents(upcoming.slice(0, 3));
         setEventCount(events.length);
         setDashboardState(
-          resolveDashboardState(monthly, housing, events.length)
+          resolveDashboardState(monthly, housing, events.length),
         );
       } catch (error) {
         console.error(error);
@@ -262,7 +284,43 @@ export default function PlanDashboardPage() {
   const hasHousingAssumptions =
     housingAssumptions.length >= REQUIRED_HOUSING_TYPES;
   const showForecast = dashboardState === "READY";
-  const showHousingSummary = housingAssumptions.some((item) => item.isSelected);
+  const selectedHousing = housingAssumptions.find((item) => item.isSelected);
+  const fallbackScenario = useMemo(() => {
+    if (!currentVersion) return undefined;
+    const base = DEFAULT_SCENARIO_SET.base;
+    return {
+      id: `fallback-${currentVersion.id}`,
+      planVersionId: currentVersion.id,
+      createdAt: currentVersion.createdAt ?? new Date().toISOString(),
+      ...base,
+      utilitiesIncreaseRateAnnual:
+        base.utilitiesIncreaseRateAnnual ?? base.inflationRate,
+    };
+  }, [currentVersion]);
+  const scenarioAssumptions =
+    scenarioSet?.[parsedScenario] ?? scenarioSet?.base ?? fallbackScenario;
+  const scenarioFallbackUsed = Boolean(
+    !scenarioSet || !scenarioSet[parsedScenario],
+  );
+  const lccResult = useMemo(() => {
+    if (!selectedHousing || !scenarioAssumptions) return null;
+    return calcLcc({
+      housing: selectedHousing,
+      scenario: scenarioAssumptions,
+      horizonMonths: 35 * 12,
+    });
+  }, [selectedHousing, scenarioAssumptions]);
+  const lccWarnings = lccResult?.summary.warnings ?? [];
+  const hasLccWarnings = lccWarnings.length > 0;
+  const latestHousingUpdateAt = useMemo(() => {
+    const housingUpdatedAt = selectedHousing?.updatedAt;
+    const versionCreatedAt = currentVersion?.createdAt;
+    if (!housingUpdatedAt) return versionCreatedAt;
+    if (!versionCreatedAt) return housingUpdatedAt;
+    const housingDate = new Date(housingUpdatedAt);
+    const versionDate = new Date(versionCreatedAt);
+    return housingDate >= versionDate ? housingUpdatedAt : versionCreatedAt;
+  }, [selectedHousing?.updatedAt, currentVersion?.createdAt]);
   const showEventFooter =
     !eventVersionMissing &&
     upcomingEvents.length > 0 &&
@@ -271,6 +329,9 @@ export default function PlanDashboardPage() {
   const currentMonthLabel = getCurrentMonthLabel();
   const lastUpdated = currentMonthly?.updatedAt
     ? formatDateShort(currentMonthly.updatedAt)
+    : undefined;
+  const housingLastUpdated = latestHousingUpdateAt
+    ? formatDateShort(latestHousingUpdateAt)
     : undefined;
   const incomeTotal = currentMonthly?.incomeTotalYen;
   const expenseTotal = currentMonthly?.expenseTotalYen;
@@ -285,6 +346,14 @@ export default function PlanDashboardPage() {
     ? formatDateShort(currentVersion.createdAt)
     : undefined;
   const versionNote = currentVersion?.changeNote;
+  const housingCardState = (() => {
+    if (!hasHousingAssumptions) return "NEEDS_HOUSING";
+    if (!selectedHousing) return "NEEDS_SELECTION";
+    if (scenarioLoading) return "LOADING";
+    if (scenarioError) return "ERROR";
+    if (hasLccWarnings) return "NEEDS_INPUT";
+    return "READY";
+  })();
   const nextActions = computeNextActions({
     currentMonthly,
     housingAssumptions,
@@ -564,13 +633,13 @@ export default function PlanDashboardPage() {
                             balanceValue === undefined
                               ? "text-muted-foreground"
                               : balanceValue >= 0
-                              ? "text-green-600"
-                              : "text-red-600"
+                                ? "text-green-600"
+                                : "text-red-600"
                           }`}
                         >
                           {balanceValue !== undefined
                             ? `${balanceValue >= 0 ? "+" : ""}${formatCurrency(
-                                balanceValue
+                                balanceValue,
                               )}`
                             : "-"}
                         </p>
@@ -691,7 +760,7 @@ export default function PlanDashboardPage() {
                                     {i + 1}
                                   </span>
                                 </div>
-                              )
+                              ),
                             )}
                           </div>
                           <p className="mt-2 text-center text-xs text-muted-foreground">
@@ -741,80 +810,146 @@ export default function PlanDashboardPage() {
                 <CardHeader>
                   <div className="flex items-start justify-between">
                     <div>
-                      <CardTitle>住宅・生涯コスト（LCC）</CardTitle>
+                      <CardTitle>住宅LCC（概算）</CardTitle>
                       <CardDescription className="mt-1">
-                        35年間の累計試算
+                        35年累計の生涯コスト
                       </CardDescription>
                     </div>
-                    {showHousingSummary && (
-                      <Badge variant="secondary">住宅 選択済み</Badge>
+                    {housingCardState === "READY" && (
+                      <Badge variant="secondary">選択中</Badge>
                     )}
                   </div>
                 </CardHeader>
                 <CardContent className="space-y-4">
-                  {showHousingSummary ? (
+                  {housingCardState === "LOADING" && (
+                    <div className="rounded-lg border bg-muted/30 p-6 text-center text-sm text-muted-foreground">
+                      読み込み中...
+                    </div>
+                  )}
+                  {housingCardState === "ERROR" && (
+                    <Alert variant="destructive">
+                      <AlertTitle>前提の取得に失敗しました</AlertTitle>
+                      <AlertDescription>{scenarioError}</AlertDescription>
+                    </Alert>
+                  )}
+                  {housingCardState === "NEEDS_HOUSING" && (
+                    <div className="rounded-lg border-2 border-dashed bg-muted/30 p-8 text-center">
+                      <Home className="mx-auto h-10 w-10 text-muted-foreground" />
+                      <p className="mt-3 text-muted-foreground">
+                        住宅前提が未設定です
+                      </p>
+                    </div>
+                  )}
+                  {housingCardState === "NEEDS_SELECTION" && (
+                    <div className="rounded-lg border-2 border-dashed bg-muted/30 p-8 text-center">
+                      <Home className="mx-auto h-10 w-10 text-muted-foreground" />
+                      <p className="mt-3 text-muted-foreground">
+                        住宅タイプが未選択です
+                      </p>
+                    </div>
+                  )}
+                  {housingCardState === "NEEDS_INPUT" && (
+                    <div className="rounded-lg border-2 border-dashed bg-muted/30 p-8 text-center">
+                      <AlertTriangle className="mx-auto h-10 w-10 text-muted-foreground" />
+                      <p className="mt-3 text-muted-foreground">
+                        概算を出すための前提が不足しています
+                      </p>
+                    </div>
+                  )}
+                  {housingCardState === "READY" && (
                     <>
                       <div className="rounded-lg border bg-gradient-to-br from-blue-50 to-blue-100/50 dark:from-blue-950/20 dark:to-blue-900/10 p-6 text-center">
                         <p className="text-sm font-medium text-blue-700 dark:text-blue-400">
                           35年累計LCC（概算）
                         </p>
                         <p className="mt-2 text-4xl font-bold text-blue-900 dark:text-blue-300">
-                          {formatCurrency(98000000)}
+                          {formatYen(lccResult?.summary.totalNominalYen, {
+                            showDashForEmpty: false,
+                            sign: "never",
+                          })}
                         </p>
                       </div>
 
                       <div className="space-y-2">
-                        <h4 className="text-sm font-medium text-foreground">
-                          主な内訳
-                        </h4>
-                        <div className="space-y-2">
-                          {[
-                            { label: "ローン返済", amount: 65000000 },
-                            { label: "修繕費", amount: 18000000 },
-                            { label: "光熱費", amount: 15000000 },
-                          ].map((item, i) => (
-                            <div
-                              key={i}
-                              className="flex items-center justify-between rounded-lg bg-muted/50 p-3"
-                            >
-                              <span className="text-sm text-muted-foreground">
-                                {item.label}
-                              </span>
-                              <span className="text-sm font-semibold text-foreground">
-                                {formatCurrency(item.amount)}
-                              </span>
-                            </div>
-                          ))}
+                        <div className="flex items-center justify-between">
+                          <span className="text-sm text-muted-foreground">
+                            選択中
+                          </span>
+                          <span className="text-sm font-semibold text-foreground">
+                            {selectedHousing
+                              ? getHousingTypeLabel(selectedHousing.housingType)
+                              : "-"}
+                          </span>
                         </div>
+                        <div className="flex items-center justify-between">
+                          <span className="text-sm text-muted-foreground">
+                            前提
+                          </span>
+                          <span className="text-sm font-semibold text-foreground">
+                            {formatScenarioLabel(
+                              scenarioAssumptions?.scenarioKey ??
+                                parsedScenario,
+                            )}
+                          </span>
+                        </div>
+                        <div className="flex items-center justify-between">
+                          <span className="text-sm text-muted-foreground">
+                            期間
+                          </span>
+                          <span className="text-sm font-semibold text-foreground">
+                            35年
+                          </span>
+                        </div>
+                        {housingLastUpdated && (
+                          <div className="flex items-center justify-between">
+                            <span className="text-sm text-muted-foreground">
+                              最終更新
+                            </span>
+                            <span className="text-sm text-foreground">
+                              {housingLastUpdated}
+                            </span>
+                          </div>
+                        )}
                       </div>
+
+                      {scenarioFallbackUsed && (
+                        <Alert>
+                          <AlertTitle>前提が不足しています</AlertTitle>
+                          <AlertDescription>
+                            シナリオ前提が不足しているため標準で表示しています。
+                          </AlertDescription>
+                        </Alert>
+                      )}
                     </>
-                  ) : (
-                    <div className="rounded-lg border-2 border-dashed bg-muted/30 p-8 text-center">
-                      <Home className="mx-auto h-10 w-10 text-muted-foreground" />
-                      <p className="mt-3 text-muted-foreground">
-                        住宅タイプを設定すると比較できます
-                      </p>
-                    </div>
                   )}
                 </CardContent>
                 <CardFooter className="flex gap-2">
-                  <Button
-                    asChild
-                    variant="default"
-                    className="flex-1 sm:flex-none"
-                  >
-                    <Link href={`/plans/${planId}/housing`}>
-                      {showHousingSummary
-                        ? "比較を見る"
-                        : hasHousingAssumptions
-                        ? "住宅タイプを選択"
-                        : "住宅タイプを設定"}
-                    </Link>
-                  </Button>
-                  {showHousingSummary && (
+                  {housingCardState === "READY" ||
+                  housingCardState === "NEEDS_SELECTION" ? (
+                    <Button
+                      asChild
+                      variant="default"
+                      className="flex-1 sm:flex-none"
+                    >
+                      <Link href={`/plans/${planId}/housing`}>
+                        住宅LCC比較へ
+                      </Link>
+                    </Button>
+                  ) : (
+                    <Button
+                      asChild
+                      variant="default"
+                      className="flex-1 sm:flex-none"
+                    >
+                      <Link href={`/plans/${planId}/housing/assumptions`}>
+                        前提を編集
+                      </Link>
+                    </Button>
+                  )}
+                  {housingCardState === "READY" && (
                     <Button asChild variant="outline">
                       <Link href={`/plans/${planId}/housing/assumptions`}>
-                        前提を調整
+                        前提を編集
                       </Link>
                     </Button>
                   )}
