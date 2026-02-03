@@ -235,7 +235,7 @@ describe("lcc calc", () => {
       isSelected: false,
       loanPrincipalYen: 30000000,
       loanInterestRate: 0.01,
-      loanTermMonths: 24, // 2 year loan
+      loanTermMonths: 24, // 2 years loan
       repaymentType: "annuity",
       propertyTaxAnnualYen: 0,
       utilitiesBaseMonthlyYen: 0,
