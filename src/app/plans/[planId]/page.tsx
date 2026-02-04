@@ -36,7 +36,12 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
-import { formatYearMonth, formatYen, getCurrentYearMonth } from "@/lib/format";
+import {
+  formatYearMonth,
+  formatYen,
+  getCurrentYearMonth,
+  type FormatYenOptions,
+} from "@/lib/format";
 import { getHousingTypeLabel } from "@/lib/housing";
 import type {
   HousingAssumptions,
@@ -107,17 +112,17 @@ export default function PlanDashboardPage() {
 
   const planName = plan?.name ?? "プラン";
 
-  const formatCurrency = (amount: number) => {
-    return new Intl.NumberFormat("ja-JP", {
-      style: "currency",
-      currency: "JPY",
-      minimumFractionDigits: 0,
-    }).format(amount);
-  };
-
-  const formatCurrencyMaybe = (amount?: number) => {
+  const formatYenMaybe = (
+    amount: number | null | undefined,
+    options?: FormatYenOptions,
+  ) => {
     if (amount === null || amount === undefined) return "-";
-    return formatCurrency(amount);
+    if (amount === 0) {
+      const sign = options?.sign ?? "auto";
+      const signPrefix = sign === "always" ? "+" : "";
+      return `${signPrefix}0円`;
+    }
+    return formatYen(amount, { showDashForEmpty: false, ...options });
   };
 
   const getEventTitle = (event: LifeEvent) => {
@@ -341,6 +346,10 @@ export default function PlanDashboardPage() {
       : undefined;
   const assetsBalance = currentMonthly?.assetsBalanceYen;
   const liabilitiesBalance = currentMonthly?.liabilitiesBalanceYen;
+  const netWorth =
+    assetsBalance !== undefined && liabilitiesBalance !== undefined
+      ? assetsBalance - liabilitiesBalance
+      : undefined;
   const versionLabel = currentVersion ? `v${currentVersion.versionNo}` : "-";
   const versionDate = currentVersion?.createdAt
     ? formatDateShort(currentVersion.createdAt)
@@ -637,11 +646,7 @@ export default function PlanDashboardPage() {
                                 : "text-red-600"
                           }`}
                         >
-                          {balanceValue !== undefined
-                            ? `${balanceValue >= 0 ? "+" : ""}${formatCurrency(
-                                balanceValue,
-                              )}`
-                            : "-"}
+                          {formatYenMaybe(balanceValue, { sign: "always" })}
                         </p>
                       </div>
                       <div className="rounded-lg border bg-muted/50 p-4 text-center">
@@ -649,7 +654,7 @@ export default function PlanDashboardPage() {
                           収入合計
                         </p>
                         <p className="mt-2 text-3xl font-bold text-foreground">
-                          {formatCurrencyMaybe(incomeTotal)}
+                          {formatYenMaybe(incomeTotal)}
                         </p>
                       </div>
                       <div className="rounded-lg border bg-muted/50 p-4 text-center">
@@ -657,7 +662,7 @@ export default function PlanDashboardPage() {
                           支出合計
                         </p>
                         <p className="mt-2 text-3xl font-bold text-foreground">
-                          {formatCurrencyMaybe(expenseTotal)}
+                          {formatYenMaybe(expenseTotal)}
                         </p>
                       </div>
                     </div>
@@ -700,7 +705,7 @@ export default function PlanDashboardPage() {
                         <p className="text-sm font-medium">資産残高</p>
                       </div>
                       <p className="mt-3 text-3xl font-bold text-green-900 dark:text-green-300">
-                        {formatCurrencyMaybe(assetsBalance)}
+                        {formatYenMaybe(assetsBalance)}
                       </p>
                     </div>
                     <div className="rounded-lg border bg-gradient-to-br from-red-50 to-red-100/50 dark:from-red-950/20 dark:to-red-900/10 p-6">
@@ -709,18 +714,37 @@ export default function PlanDashboardPage() {
                         <p className="text-sm font-medium">負債残高</p>
                       </div>
                       <p className="mt-3 text-3xl font-bold text-red-900 dark:text-red-300">
-                        {formatCurrencyMaybe(liabilitiesBalance)}
+                        {formatYenMaybe(liabilitiesBalance)}
                       </p>
                     </div>
+                  </div>
+                  <div className="mt-4 flex items-center justify-between rounded-lg border bg-muted/30 px-4 py-3">
+                    <span className="text-sm text-muted-foreground">
+                      純資産
+                    </span>
+                    <span
+                      className={`text-base font-semibold ${
+                        netWorth === undefined
+                          ? "text-muted-foreground"
+                          : netWorth >= 0
+                            ? "text-emerald-700"
+                            : "text-rose-700"
+                      }`}
+                    >
+                      {formatYenMaybe(netWorth, { sign: "always" })}
+                    </span>
                   </div>
                 </CardContent>
                 <CardFooter>
                   <Button
+                    asChild
                     variant="outline"
                     className="w-full sm:w-auto bg-transparent"
                   >
-                    <Settings className="mr-2 h-4 w-4" />
-                    残高を更新
+                    <Link href={`/plans/${planId}/months/current`}>
+                      <Settings className="mr-2 h-4 w-4" />
+                      残高を更新
+                    </Link>
                   </Button>
                 </CardFooter>
               </Card>
@@ -775,7 +799,7 @@ export default function PlanDashboardPage() {
                             10年後の資産見込み（概算）
                           </span>
                           <span className="text-lg font-semibold text-foreground">
-                            {formatCurrency(12300000)}
+                            {formatYen(12300000, { showDashForEmpty: false })}
                           </span>
                         </div>
                         <Separator />

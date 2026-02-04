@@ -79,6 +79,7 @@ vi.mock("@/lib/repo/factory", () => ({
 }));
 
 type FormatYenOptions = {
+  suffix?: string;
   showDashForEmpty?: boolean;
   sign?: "always" | "never" | "auto";
 };
@@ -299,6 +300,27 @@ describe("PlanDashboardPage", () => {
     );
   });
 
+  it("shows empty state for monthly summary when record is missing", async () => {
+    monthlyGetByYmMock.mockResolvedValue(undefined);
+    render(<PlanDashboardPage />);
+
+    await waitFor(() =>
+      expect(screen.getByText("今月のデータがまだありません")).toBeInTheDocument()
+    );
+    const title = screen.getByText("今月（2026年1月）の状況");
+    const card = title.closest(".shadow-sm");
+    expect(card).toBeTruthy();
+    const scoped = within(card as HTMLElement);
+    expect(scoped.getByRole("link", { name: "今月を入力" })).toHaveAttribute(
+      "href",
+      "/plans/plan-123/months/current"
+    );
+    expect(scoped.getByRole("link", { name: "月次一覧へ" })).toHaveAttribute(
+      "href",
+      "/plans/plan-123/months"
+    );
+  });
+
   it("shows monthly status as completed when record exists even if not finalized", async () => {
     monthlyGetByYmMock.mockResolvedValue({
       ...makeMonthly("plan-123"),
@@ -313,6 +335,25 @@ describe("PlanDashboardPage", () => {
     expect(
       container.querySelector('a[href="/plans/plan-123/months/current"]')
     ).toBeTruthy();
+  });
+
+  it("renders monthly aggregates and balances when record exists", async () => {
+    render(<PlanDashboardPage />);
+
+    await waitFor(() =>
+      expect(screen.getByText("今月の収支")).toBeInTheDocument()
+    );
+
+    expect(screen.getByText("+50000円")).toBeInTheDocument();
+    expect(screen.getByText("400000円")).toBeInTheDocument();
+    expect(screen.getByText("350000円")).toBeInTheDocument();
+    expect(screen.getByText("2000000円")).toBeInTheDocument();
+    expect(screen.getByText("15000000円")).toBeInTheDocument();
+    expect(screen.getByText("-13000000円")).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "残高を更新" })).toHaveAttribute(
+      "href",
+      "/plans/plan-123/months/current"
+    );
   });
 
   it("shows housing setup CTA when assumptions are missing", async () => {
