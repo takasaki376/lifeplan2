@@ -170,6 +170,8 @@ export default function MonthlyInputSimple() {
   const netBalanceText =
     netBalance === undefined
       ? ""
+      : netBalance === 0
+      ? "+¥0円"
       : formatYen(netBalance, { showDashForEmpty: false, sign: "always" });
 
   const formatUpdatedAt = (value: string) => {
