@@ -169,8 +169,10 @@ export default function MonthlyInputSimple() {
 
   const netBalanceText =
     netBalance === undefined
-      ? "-"
-      : formatYen(netBalance, { showDashForEmpty: false, sign: "always" });
+      ? ""
+      : netBalance === 0
+        ? "+¥0円"
+        : formatYen(netBalance, { showDashForEmpty: false, sign: "always" });
 
   const formatUpdatedAt = (value: string) => {
     const parsed = new Date(value);
@@ -309,7 +311,23 @@ export default function MonthlyInputSimple() {
           <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
             <div>
               <h1 className="text-2xl font-semibold text-foreground">
-                今月の入力（かんたん）
+                {(() => {
+                  // Derive the year-month from the URL if available
+                  if (typeof window === "undefined") {
+                    return "今月の入力（かんたん）";
+                  }
+                  const path = window.location.pathname;
+                  const match = path.match(/\/months\/(\d{4}-\d{2})/);
+                  if (!match) {
+                    return "今月の入力（かんたん）";
+                  }
+                  const ym = match[1] as YearMonth;
+                  const currentYm = getCurrentYearMonth();
+                  if (ym === currentYm) {
+                    return "今月の入力（かんたん）";
+                  }
+                  return `${formatYearMonth(ym)}の入力（かんたん）`;
+                })()}
               </h1>
               <p className="mt-1 text-sm text-muted-foreground">
                 正確でなくてOK。あとから修正できます。
