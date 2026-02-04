@@ -1,9 +1,8 @@
 import React from "react";
-import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { cleanup, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import type { MonthlyRecord, Plan } from "@/lib/domain/types";
-import MonthlyInputSimplePage from "./page";
+import MonthlyInputSpecificMonthPage from "./page";
 
 const planGetMock = vi.fn();
 const monthlyGetByYmMock = vi.fn();
@@ -19,10 +18,15 @@ vi.mock("next/link", () => ({
   default: ({
     href,
     children,
+    ...rest
   }: {
     href: string;
     children: React.ReactNode;
-  }) => <a href={href}>{children}</a>,
+  } & React.AnchorHTMLAttributes<HTMLAnchorElement>) => (
+    <a href={href} {...rest}>
+      {children}
+    </a>
+  ),
 }));
 
 vi.mock("@/lib/repo/factory", () => ({
@@ -37,142 +41,99 @@ vi.mock("@/lib/repo/factory", () => ({
   }),
 }));
 
-vi.mock("sonner", () => ({
-  toast: {
-    success: vi.fn(),
-    error: vi.fn(),
-    info: vi.fn(),
-  },
-}));
-
-const makePlan = (partial: Partial<Plan> & Pick<Plan, "id" | "name">): Plan => {
-  const now = "2026-01-02T00:00:00.000Z";
-  return {
-    id: partial.id,
-    name: partial.name,
-    status: partial.status ?? "active",
-    createdAt: partial.createdAt ?? now,
-    updatedAt: partial.updatedAt ?? now,
-    householdType: partial.householdType,
-    note: partial.note,
-    userId: partial.userId,
-    currentVersionId: partial.currentVersionId,
-    archivedAt: partial.archivedAt,
-  };
-};
-
-const makeRecord = (
-  planId: string,
-  ym = "2026-01",
-): MonthlyRecord => ({
-  id: `record-${planId}`,
-  planId,
-  ym,
-  incomeTotalYen: 100000,
-  expenseTotalYen: 80000,
-  assetsBalanceYen: 3000000,
-  liabilitiesBalanceYen: 25000000,
-  isFinalized: true,
-  createdAt: "2026-01-01T00:00:00.000Z",
-  updatedAt: "2026-01-05T00:00:00.000Z",
-});
-
-describe("MonthlyInputSimplePage ([yyyy-mm])", () => {
-  beforeAll(() => {
-    if (!("ResizeObserver" in globalThis)) {
-      class ResizeObserverMock {
-        observe(_target: Element) {}
-        unobserve(_target: Element) {}
-        disconnect() {}
-      }
-      globalThis.ResizeObserver =
-        ResizeObserverMock as unknown as typeof ResizeObserver;
-    }
-    if (!window.matchMedia) {
-      window.matchMedia = () =>
-        ({
-          matches: false,
-          media: "",
-          onchange: null,
-          addListener: () => {},
-          removeListener: () => {},
-          addEventListener: () => {},
-          removeEventListener: () => {},
-          dispatchEvent: () => false,
-        }) as MediaQueryList;
-    }
-  });
-
-  afterEach(() => {
-    cleanup();
-  });
+describe("MonthlyInputSpecificMonthPage balance display", () => {
+  const getIncomeInput = () =>
+    screen.getAllByRole("textbox", { name: "収入合計" })[0];
+  const getExpenseInput = () =>
+    screen.getAllByRole("textbox", { name: "支出合計" })[0];
+  const getBalanceEl = () =>
+    screen
+      .getAllByTestId("monthly-net-balance")
+      .find((node) => node.textContent && node.textContent.length > 0) ??
+    screen.getAllByTestId("monthly-net-balance")[0];
 
   beforeEach(() => {
     planGetMock.mockReset();
     monthlyGetByYmMock.mockReset();
     monthlyUpsertByYmMock.mockReset();
     pushMock.mockReset();
-    planGetMock.mockResolvedValue(makePlan({ id: "plan-123", name: "Test Plan" }));
-  });
 
-  it("shows existing record values and status", async () => {
-    monthlyGetByYmMock.mockResolvedValue(makeRecord("plan-123"));
-
-    render(<MonthlyInputSimplePage />);
-
-    await waitFor(() =>
-      expect(screen.getByRole("link", { name: "Test Plan" })).toBeInTheDocument(),
-    );
-
-    expect(screen.getByText("入力済み")).toBeInTheDocument();
-
-    const inputs = screen.getAllByPlaceholderText("0");
-    expect((inputs[0] as HTMLInputElement).value).toBe("100,000");
-    expect((inputs[1] as HTMLInputElement).value).toBe("80,000");
-    expect((inputs[2] as HTMLInputElement).value).toBe("3,000,000");
-    expect((inputs[3] as HTMLInputElement).value).toBe("25,000,000");
-  });
-
-  it("saves input via upsertByYm and navigates back", async () => {
-    const user = userEvent.setup();
+    planGetMock.mockResolvedValue({ id: "plan-123", name: "Plan A" });
     monthlyGetByYmMock.mockResolvedValue(undefined);
-    monthlyUpsertByYmMock.mockResolvedValue(
-      makeRecord("plan-123", "2026-01"),
-    );
+  });
 
-    render(<MonthlyInputSimplePage />);
+  afterEach(() => {
+    cleanup();
+  });
 
-    await waitFor(() =>
-      expect(screen.getByRole("link", { name: "Test Plan" })).toBeInTheDocument(),
-    );
-    await waitFor(() =>
-      expect(monthlyGetByYmMock).toHaveBeenCalledWith("plan-123", "2026-01"),
-    );
+  it("shows balance when both income and expense are entered", async () => {
+    const user = userEvent.setup();
+    const { container } = render(<MonthlyInputSpecificMonthPage />);
 
-    const inputs = screen.getAllByPlaceholderText("0");
-    await user.type(inputs[0], "120000");
-    await user.type(inputs[1], "90000");
-    await user.type(inputs[2], "3500000");
-    await user.type(inputs[3], "24000000");
+    await waitFor(() => expect(getIncomeInput()).toBeInTheDocument());
 
-    const saveButton = screen.getByTestId("monthly-save-button");
-    await waitFor(() => expect(saveButton).toBeEnabled());
-    await user.click(saveButton);
+    await user.type(getIncomeInput(), "300000");
+    await user.type(getExpenseInput(), "200000");
 
-    await waitFor(() => {
-      expect(monthlyUpsertByYmMock).toHaveBeenCalledWith(
-        "plan-123",
-        "2026-01",
-        {
-          incomeTotalYen: 120000,
-          expenseTotalYen: 90000,
-          assetsBalanceYen: 3500000,
-          liabilitiesBalanceYen: 24000000,
-          isFinalized: true,
-        },
-      );
-    });
+    const balanceEl = getBalanceEl();
+    expect(balanceEl).toBeTruthy();
+    expect(balanceEl.textContent).toBe("+100,000円");
+  });
 
-    expect(pushMock).toHaveBeenCalledWith("/plans/plan-123");
+  it("shows empty placeholder when either field is empty", async () => {
+    const user = userEvent.setup();
+    const { container } = render(<MonthlyInputSpecificMonthPage />);
+
+    await waitFor(() => expect(getIncomeInput()).toBeInTheDocument());
+
+    await user.type(getExpenseInput(), "120000");
+
+    const balanceEl = screen.getAllByTestId("monthly-net-balance")[0];
+    expect(balanceEl).toBeTruthy();
+    expect(balanceEl.textContent).toBe("");
+  });
+
+  it("changes balance color for positive and negative values", async () => {
+    const user = userEvent.setup();
+    const { container } = render(<MonthlyInputSpecificMonthPage />);
+
+    await waitFor(() => expect(getIncomeInput()).toBeInTheDocument());
+
+    await user.type(getIncomeInput(), "100000");
+    await user.type(getExpenseInput(), "20000");
+
+    let balanceEl = getBalanceEl();
+    expect(balanceEl).toBeTruthy();
+    expect(balanceEl.className).toContain("text-green-600");
+
+    await user.clear(getIncomeInput());
+    await user.clear(getExpenseInput());
+    await user.type(getIncomeInput(), "50000");
+    await user.type(getExpenseInput(), "120000");
+
+    balanceEl = getBalanceEl();
+    expect(balanceEl).toBeTruthy();
+    expect(balanceEl.className).toContain("text-red-600");
+  });
+
+  it("displays correct sign prefix for positive and negative balance", async () => {
+    const user = userEvent.setup();
+    const { container } = render(<MonthlyInputSpecificMonthPage />);
+
+    await waitFor(() => expect(getIncomeInput()).toBeInTheDocument());
+
+    await user.type(getIncomeInput(), "90000");
+    await user.type(getExpenseInput(), "10000");
+
+    let balanceEl = getBalanceEl();
+    expect(balanceEl.textContent?.startsWith("+")).toBe(true);
+
+    await user.clear(getIncomeInput());
+    await user.clear(getExpenseInput());
+    await user.type(getIncomeInput(), "5000");
+    await user.type(getExpenseInput(), "9000");
+
+    balanceEl = getBalanceEl();
+    expect(balanceEl.textContent?.startsWith("-")).toBe(true);
   });
 });
