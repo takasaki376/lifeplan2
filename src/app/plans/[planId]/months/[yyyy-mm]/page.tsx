@@ -1,5 +1,5 @@
 import MonthlyInputSimple from "../_components/MonthlyInputSimple";
 
-export default function MonthlyInputSpecificMonthPage() {
+export default function MonthlyInputSimplePage() {
   return <MonthlyInputSimple />;
 }
