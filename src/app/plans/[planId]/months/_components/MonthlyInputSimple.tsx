@@ -53,9 +53,9 @@ export default function MonthlyInputSimple() {
   const router = useRouter();
   const planId = params.planId as string;
   const rawYm = params["yyyy-mm"];
-  const ym = (typeof rawYm === "string"
-    ? rawYm
-    : getCurrentYearMonth()) as YearMonth;
+  const ym = (
+    typeof rawYm === "string" ? rawYm : getCurrentYearMonth()
+  ) as YearMonth;
   const [planName, setPlanName] = useState("");
   const [record, setRecord] = useState<MonthlyRecord | null>(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -112,7 +112,7 @@ export default function MonthlyInputSimple() {
 
   const handleInputChange = (
     field: "income" | "expense" | "assets" | "liabilities",
-    value: string
+    value: string,
   ) => {
     const numValue = parseCurrency(value);
     const error = validateField(numValue);
@@ -140,7 +140,7 @@ export default function MonthlyInputSimple() {
   };
 
   const handleInputBlur = (
-    field: "income" | "expense" | "assets" | "liabilities"
+    field: "income" | "expense" | "assets" | "liabilities",
   ) => {
     switch (field) {
       case "income":
@@ -169,7 +169,7 @@ export default function MonthlyInputSimple() {
 
   const netBalanceText =
     netBalance === undefined
-      ? ""
+      ? "-"
       : formatYen(netBalance, { showDashForEmpty: false, sign: "always" });
 
   const formatUpdatedAt = (value: string) => {
@@ -237,7 +237,7 @@ export default function MonthlyInputSimple() {
         expenseTotalYen: expense,
         assetsBalanceYen: assets,
         liabilitiesBalanceYen: liabilities,
-        isFinalized: finalize ? true : record?.isFinalized ?? false,
+        isFinalized: finalize ? true : (record?.isFinalized ?? false),
       });
       setRecord(updated);
       toast.success("保存しました");
@@ -273,7 +273,8 @@ export default function MonthlyInputSimple() {
   };
 
   const handleMonthSelect = (month: number) => {
-    const nextYm = `${currentMonth.year}-${String(month).padStart(2, "0")}` as YearMonth;
+    const nextYm =
+      `${currentMonth.year}-${String(month).padStart(2, "0")}` as YearMonth;
     router.push(`/plans/${planId}/months/${nextYm}`);
   };
 
@@ -399,14 +400,16 @@ export default function MonthlyInputSimple() {
                         </Button>
                       </DropdownMenuTrigger>
                       <DropdownMenuContent align="center" className="w-[140px]">
-                        {Array.from({ length: 12 }, (_, i) => i + 1).map((m) => (
-                          <DropdownMenuItem
-                            key={m}
-                            onClick={() => handleMonthSelect(m)}
-                          >
-                            {currentMonth.year}年{m}月
-                          </DropdownMenuItem>
-                        ))}
+                        {Array.from({ length: 12 }, (_, i) => i + 1).map(
+                          (m) => (
+                            <DropdownMenuItem
+                              key={m}
+                              onClick={() => handleMonthSelect(m)}
+                            >
+                              {currentMonth.year}年{m}月
+                            </DropdownMenuItem>
+                          ),
+                        )}
                       </DropdownMenuContent>
                     </DropdownMenu>
 
@@ -648,9 +651,7 @@ export default function MonthlyInputSimple() {
             {/* SECTION 3: QUICK SUMMARY */}
             <Card className="shadow-sm border-2">
               <CardHeader className="pb-3">
-                <CardTitle className="text-base">
-                  収支（自動計算）
-                </CardTitle>
+                <CardTitle className="text-base">収支（自動計算）</CardTitle>
                 <CardDescription className="text-xs">
                   ※収入合計 - 支出合計
                 </CardDescription>
@@ -658,6 +659,7 @@ export default function MonthlyInputSimple() {
               <CardContent className="space-y-3">
                 <div className="rounded-lg bg-muted/50 p-4 text-center">
                   <p
+                    data-testid="monthly-net-balance"
                     className={`text-3xl font-bold ${
                       netBalance === undefined
                         ? "text-muted-foreground"
@@ -678,7 +680,9 @@ export default function MonthlyInputSimple() {
             {/* SECTION 4: OPTIONAL SHORTCUTS */}
             <Card className="shadow-sm bg-muted/50">
               <CardHeader className="pb-3">
-                <CardTitle className="text-base">次にやるなら（任意）</CardTitle>
+                <CardTitle className="text-base">
+                  次にやるなら（任意）
+                </CardTitle>
                 <CardDescription className="text-xs">
                   まずは合計だけで十分です
                 </CardDescription>
