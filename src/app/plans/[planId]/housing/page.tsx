@@ -55,6 +55,7 @@ import {
   formatScenarioLabel,
   parseScenario,
   scenarioKeys,
+  buildScenarioHref,
 } from "@/lib/scenario";
 import { useScenarioNavigation } from "@/lib/hooks/useScenarioNavigation";
 
@@ -182,11 +183,12 @@ export default function HousingLCCPage() {
   const scenarioFallbackUsed = Boolean(
     !scenarioSet || !scenarioSet[parsedScenario],
   );
-  const buildScenarioHref = (base: string, params?: Record<string, string>) => {
-    const search = new URLSearchParams(params);
-    search.set("scenario", parsedScenario);
-    return `${base}?${search.toString()}`;
-  };
+  const buildScenarioLink = (base: string, params?: Record<string, string>) =>
+    buildScenarioHref(base, {
+      scenario: parsedScenario,
+      params,
+      includeWhenMissing: true,
+    });
 
   const lccMap = useMemo(() => {
     const map = new Map<HousingType, ReturnType<typeof calcLcc>>();
@@ -398,7 +400,7 @@ export default function HousingLCCPage() {
             {/* Assumptions button */}
             <Button asChild>
               <Link
-                href={buildScenarioHref(
+                href={buildScenarioLink(
                   `/plans/${planId}/housing/assumptions`,
                 )}
               >
@@ -469,7 +471,7 @@ export default function HousingLCCPage() {
 
             <div className="flex gap-2">
               <Button size="sm" variant="ghost" asChild>
-                <Link href={buildScenarioHref(`/plans/${planId}`)}>
+                <Link href={buildScenarioLink(`/plans/${planId}`)}>
                   ダッシュボードへ戻る
                 </Link>
               </Button>
@@ -504,7 +506,7 @@ export default function HousingLCCPage() {
                     </p>
                     <Button size="sm" asChild>
                       <Link
-                        href={buildScenarioHref(
+                        href={buildScenarioLink(
                           `/plans/${planId}/housing/assumptions`,
                           { type: housingType },
                         )}
@@ -639,7 +641,7 @@ export default function HousingLCCPage() {
                     onClick={(e) => e.stopPropagation()}
                   >
                     <Link
-                      href={buildScenarioHref(
+                      href={buildScenarioLink(
                         `/plans/${planId}/housing/${housing.housingType}`,
                       )}
                     >
@@ -653,7 +655,7 @@ export default function HousingLCCPage() {
                     onClick={(e) => e.stopPropagation()}
                   >
                     <Link
-                      href={buildScenarioHref(
+                      href={buildScenarioLink(
                         `/plans/${planId}/housing/assumptions`,
                         { type: housing.housingType },
                       )}
@@ -1027,7 +1029,7 @@ export default function HousingLCCPage() {
             <div className="flex gap-2 pt-2">
               <Button size="sm" asChild>
                 <Link
-                  href={buildScenarioHref(
+                  href={buildScenarioLink(
                     `/plans/${planId}/housing/assumptions`,
                   )}
                 >

@@ -61,7 +61,7 @@ describe("HousingAssumptionsPage", () => {
       container.querySelector('a[href="/plans/plan-123"]'),
     ).toBeTruthy();
     expect(
-      container.querySelector('a[href="/plans/plan-123/housing"]'),
+      container.querySelector('a[href="/plans/plan-123/housing?scenario=base"]'),
     ).toBeTruthy();
 
     const tabs = screen.getAllByRole("tab");

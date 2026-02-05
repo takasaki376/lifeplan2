@@ -51,6 +51,7 @@ import {
 import { Badge } from "@/components/ui/badge";
 import type { ScenarioPreset } from "@/lib/domain/types";
 import { HOUSING_TYPE_LABELS } from "@/lib/housing";
+import { buildScenarioHref } from "@/lib/scenario";
 import { toast } from "sonner";
 
 // Toggle this to simulate first-time vs existing assumptions state
@@ -187,12 +188,12 @@ export default function HousingAssumptionsPage() {
   const planId = params.planId as string;
   const scenarioParam = searchParams.get("scenario");
   const parsedScenario = scenarioParam ?? "base";
-  const buildScenarioHref = (base: string, params?: Record<string, string>) => {
-    const search = new URLSearchParams(params);
-    search.set("scenario", parsedScenario);
-    const query = search.toString();
-    return query ? `${base}?${query}` : base;
-  };
+  const buildScenarioLink = (base: string, params?: Record<string, string>) =>
+    buildScenarioHref(base, {
+      scenario: parsedScenario,
+      params,
+      includeWhenMissing: true,
+    });
   const [activeType, setActiveType] = useState<HousingType>(
     "high_performance_home",
   );
@@ -438,7 +439,7 @@ export default function HousingAssumptionsPage() {
               <Button
                 variant="outline"
                 onClick={() =>
-                  router.push(buildScenarioHref(`/plans/${planId}/housing`))
+                  router.push(buildScenarioLink(`/plans/${planId}/housing`))
                 }
               >
                 あとで設定する（比較へ）
@@ -469,7 +470,7 @@ export default function HousingAssumptionsPage() {
             </Link>
             <ChevronRight className="h-4 w-4" />
             <Link
-              href={buildScenarioHref(`/plans/${planId}/housing`)}
+              href={buildScenarioLink(`/plans/${planId}/housing`)}
               className="hover:text-foreground transition-colors"
             >
               住宅LCC
@@ -498,7 +499,7 @@ export default function HousingAssumptionsPage() {
               <Button
                 variant="outline"
                 onClick={() =>
-                  router.push(buildScenarioHref(`/plans/${planId}/housing`))
+                  router.push(buildScenarioLink(`/plans/${planId}/housing`))
                 }
               >
                 比較へ戻る
@@ -1824,11 +1825,11 @@ export default function HousingAssumptionsPage() {
                 <Button
                   className="w-full"
                   onClick={() =>
-                    router.push(buildScenarioHref(`/plans/${planId}/housing`))
-                  }
-                >
-                  比較を更新して見る
-                </Button>
+                  router.push(buildScenarioLink(`/plans/${planId}/housing`))
+                }
+              >
+                比較を更新して見る
+              </Button>
               </CardFooter>
             </Card>
 

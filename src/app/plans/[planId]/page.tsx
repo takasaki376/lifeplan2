@@ -51,6 +51,7 @@ import {
   formatScenarioLabel,
   parseScenario,
   scenarioKeys,
+  buildScenarioHref,
 } from "@/lib/scenario";
 import type { ScenarioKey } from "@/lib/scenario";
 import { useScenarioNavigation } from "@/lib/hooks/useScenarioNavigation";
@@ -74,11 +75,12 @@ export default function PlanDashboardPage() {
   const currentYm = getCurrentYearMonth();
   const scenarioParam = searchParams.get("scenario");
   const parsedScenario = parseScenario(scenarioParam);
-  const buildScenarioHref = (base: string, params?: Record<string, string>) => {
-    const search = new URLSearchParams(params);
-    search.set("scenario", parsedScenario);
-    return `${base}?${search.toString()}`;
-  };
+  const buildScenarioLink = (base: string, params?: Record<string, string>) =>
+    buildScenarioHref(base, {
+      scenario: parsedScenario,
+      params,
+      includeWhenMissing: true,
+    });
 
   const [plan, setPlan] = useState<Plan | null>(null);
   const [currentVersion, setCurrentVersion] = useState<PlanVersion | null>(
@@ -467,7 +469,7 @@ export default function PlanDashboardPage() {
                       </Link>
                     </Button>
                     <Button asChild variant="outline">
-                      <Link href={buildScenarioHref(`/plans/${planId}/housing`)}>
+                      <Link href={buildScenarioLink(`/plans/${planId}/housing`)}>
                         比較トップへ
                       </Link>
                     </Button>
@@ -483,7 +485,7 @@ export default function PlanDashboardPage() {
                   </CardHeader>
                   <CardFooter>
                     <Button asChild>
-                      <Link href={buildScenarioHref(`/plans/${planId}/housing`)}>
+                      <Link href={buildScenarioLink(`/plans/${planId}/housing`)}>
                         住宅LCC比較へ
                       </Link>
                     </Button>
@@ -865,7 +867,7 @@ export default function PlanDashboardPage() {
                       variant="default"
                       className="flex-1 sm:flex-none"
                     >
-                      <Link href={buildScenarioHref(`/plans/${planId}/housing`)}>
+                      <Link href={buildScenarioLink(`/plans/${planId}/housing`)}>
                         住宅LCC比較へ
                       </Link>
                     </Button>

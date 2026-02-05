@@ -25,3 +25,28 @@ export const parseScenario = (value: string | null | undefined): ScenarioKey => 
 export const formatScenarioLabel = (key: ScenarioKey): string => {
   return scenarioLabelMap[key];
 };
+
+type BuildScenarioHrefOptions = {
+  scenario?: string | null;
+  params?: Record<string, string>;
+  includeWhenMissing?: boolean;
+};
+
+export const buildScenarioHref = (
+  base: string,
+  options: BuildScenarioHrefOptions = {},
+): string => {
+  const { scenario, params, includeWhenMissing = false } = options;
+  const search = new URLSearchParams(params);
+  const scenarioKey = isScenarioKey(scenario)
+    ? scenario
+    : includeWhenMissing
+    ? DEFAULT_SCENARIO
+    : undefined;
+
+  if (scenarioKey) {
+    search.set("scenario", scenarioKey);
+  }
+  const query = search.toString();
+  return query ? `${base}?${query}` : base;
+};

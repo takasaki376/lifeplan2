@@ -35,6 +35,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { PlanNavigationTabs } from "@/components/plan/PlanNavigationTabs";
+import { buildScenarioHref } from "@/lib/scenario";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -111,12 +112,8 @@ export default function VersionsPage() {
   const searchParams = useSearchParams();
   const planId = params.planId as string;
   const scenarioParam = searchParams.get("scenario");
-  const buildScenarioHref = (base: string) => {
-    if (!scenarioParam) return base;
-    const search = new URLSearchParams();
-    search.set("scenario", scenarioParam);
-    return `${base}?${search.toString()}`;
-  };
+  const buildScenarioLink = (base: string) =>
+    buildScenarioHref(base, { scenario: scenarioParam });
 
   const [tab, setTab] = useState<"all" | "current" | "archived">("all");
   const [searchQuery, setSearchQuery] = useState("");
@@ -202,7 +199,7 @@ export default function VersionsPage() {
             </div>
             <div className="flex gap-2">
               <Button variant="outline" size="sm" asChild>
-                <Link href={buildScenarioHref(`/plans/${planId}`)}>
+                <Link href={buildScenarioLink(`/plans/${planId}`)}>
                   <Home className="mr-2 h-4 w-4" />
                   ダッシュボードへ
                 </Link>
