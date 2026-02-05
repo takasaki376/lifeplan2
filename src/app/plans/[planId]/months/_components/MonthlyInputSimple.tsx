@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { useParams, useRouter } from "next/navigation";
+import { useParams, useRouter, useSearchParams } from "next/navigation";
 import {
   ChevronLeft,
   ChevronRight,
@@ -36,7 +36,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { toast } from "sonner";
-import type { MonthlyRecord, YearMonth } from "@/lib/domain/types";
+import type { MonthlyRecord, YearMonth, ScenarioKey } from "@/lib/domain/types";
 import {
   formatYearMonth,
   formatYen,
@@ -46,16 +46,28 @@ import {
   prevYearMonth,
 } from "@/lib/format";
 import { createRepositories } from "@/lib/repo/factory";
+import { buildScenarioHref, parseScenario } from "@/lib/scenario";
+import { useScenarioNavigation } from "@/lib/hooks/useScenarioNavigation";
 
 export default function MonthlyInputSimple() {
   const repos = useMemo(() => createRepositories(), []);
   const params = useParams();
   const router = useRouter();
+  const searchParams = useSearchParams();
   const planId = params.planId as string;
   const rawYm = params["yyyy-mm"];
   const ym = (
     typeof rawYm === "string" ? rawYm : getCurrentYearMonth()
   ) as YearMonth;
+  const scenarioParam = searchParams.get("scenario");
+  const scenarioKey = parseScenario(scenarioParam);
+  const { changeScenario } = useScenarioNavigation();
+  const buildScenarioLink = (base: string, params?: Record<string, string>) =>
+    buildScenarioHref(base, {
+      scenario: scenarioKey,
+      params,
+      includeWhenMissing: true,
+    });
   const [planName, setPlanName] = useState("");
   const [record, setRecord] = useState<MonthlyRecord | null>(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -69,10 +81,18 @@ export default function MonthlyInputSimple() {
     year: new Date().getFullYear(),
     month: new Date().getMonth() + 1,
   };
-  const [scenario, setScenario] = useState<
-    "conservative" | "standard" | "optimistic"
-  >("standard");
+  type MonthlyScenario = "conservative" | "standard" | "optimistic";
+  const toMonthlyScenario = (key: ScenarioKey): MonthlyScenario =>
+    key === "base" ? "standard" : key;
+  const toScenarioKey = (value: MonthlyScenario): ScenarioKey =>
+    value === "standard" ? "base" : value;
+  const [scenario, setScenario] = useState<MonthlyScenario>(
+    toMonthlyScenario(scenarioKey),
+  );
   const [isSaving, setIsSaving] = useState(false);
+  useEffect(() => {
+    setScenario(toMonthlyScenario(scenarioKey));
+  }, [scenarioKey]);
 
   // Form state
   const [income, setIncome] = useState<number | undefined>();
@@ -244,7 +264,7 @@ export default function MonthlyInputSimple() {
       setRecord(updated);
       toast.success("保存しました");
       if (finalize) {
-        router.push(`/plans/${planId}`);
+        router.push(buildScenarioLink(`/plans/${planId}`));
       }
     } catch (error) {
       console.error(error);
@@ -265,19 +285,19 @@ export default function MonthlyInputSimple() {
   const handlePreviousMonth = () => {
     const prev = prevYearMonth(ym);
     if (!prev) return;
-    router.push(`/plans/${planId}/months/${prev}`);
+    router.push(buildScenarioLink(`/plans/${planId}/months/${prev}`));
   };
 
   const handleNextMonth = () => {
     const next = nextYearMonth(ym);
     if (!next) return;
-    router.push(`/plans/${planId}/months/${next}`);
+    router.push(buildScenarioLink(`/plans/${planId}/months/${next}`));
   };
 
   const handleMonthSelect = (month: number) => {
     const nextYm =
       `${currentMonth.year}-${String(month).padStart(2, "0")}` as YearMonth;
-    router.push(`/plans/${planId}/months/${nextYm}`);
+    router.push(buildScenarioLink(`/plans/${planId}/months/${nextYm}`));
   };
 
   const isExisting = Boolean(record);
@@ -298,7 +318,7 @@ export default function MonthlyInputSimple() {
             </Link>
             <ChevronRight className="h-4 w-4" />
             <Link
-              href={`/plans/${planId}`}
+              href={buildScenarioLink(`/plans/${planId}`)}
               className="hover:text-foreground transition-colors"
             >
               {planName || "プラン"}
@@ -338,7 +358,11 @@ export default function MonthlyInputSimple() {
               {/* Scenario Selector (Optional) */}
               <Tabs
                 value={scenario}
-                onValueChange={(v) => setScenario(v as typeof scenario)}
+                onValueChange={(v) => {
+                  const next = v as MonthlyScenario;
+                  setScenario(next);
+                  changeScenario(toScenarioKey(next), scenarioKey);
+                }}
                 className="hidden sm:block"
               >
                 <TabsList className="h-9">
@@ -711,7 +735,11 @@ export default function MonthlyInputSimple() {
                   variant="outline"
                   className="w-full justify-start bg-card"
                 >
-                  <Link href={`/plans/${planId}/months/${ym}/detail`}>
+                  <Link
+                    href={buildScenarioLink(
+                      `/plans/${planId}/months/${ym}/detail`,
+                    )}
+                  >
                     <Calendar className="mr-2 h-4 w-4" />
                     詳細入力へ（カテゴリ内訳）
                   </Link>
@@ -721,7 +749,7 @@ export default function MonthlyInputSimple() {
                   variant="outline"
                   className="w-full justify-start bg-card"
                 >
-                  <Link href={`/plans/${planId}/events/new`}>
+                  <Link href={buildScenarioLink(`/plans/${planId}/events/new`)}>
                     <Plus className="mr-2 h-4 w-4" />
                     イベントを追加
                   </Link>
@@ -731,7 +759,7 @@ export default function MonthlyInputSimple() {
                   variant="outline"
                   className="w-full justify-start bg-card"
                 >
-                  <Link href={`/plans/${planId}`}>
+                  <Link href={buildScenarioLink(`/plans/${planId}`)}>
                     <LayoutDashboard className="mr-2 h-4 w-4" />
                     ダッシュボードへ戻る
                   </Link>

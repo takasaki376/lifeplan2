@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { useParams, useRouter } from "next/navigation";
+import { useParams, useRouter, useSearchParams } from "next/navigation";
 import {
   ChevronRight,
   Plus,
@@ -34,6 +34,8 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { PlanNavigationTabs } from "@/components/plan/PlanNavigationTabs";
+import { buildScenarioHref } from "@/lib/scenario";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -107,7 +109,11 @@ const MOCK_VERSIONS: Version[] = [
 export default function VersionsPage() {
   const params = useParams();
   const router = useRouter();
+  const searchParams = useSearchParams();
   const planId = params.planId as string;
+  const scenarioParam = searchParams.get("scenario");
+  const buildScenarioLink = (base: string) =>
+    buildScenarioHref(base, { scenario: scenarioParam });
 
   const [tab, setTab] = useState<"all" | "current" | "archived">("all");
   const [searchQuery, setSearchQuery] = useState("");
@@ -193,7 +199,7 @@ export default function VersionsPage() {
             </div>
             <div className="flex gap-2">
               <Button variant="outline" size="sm" asChild>
-                <Link href={`/plans/${planId}`}>
+                <Link href={buildScenarioLink(`/plans/${planId}`)}>
                   <Home className="mr-2 h-4 w-4" />
                   ダッシュボードへ
                 </Link>
@@ -208,6 +214,8 @@ export default function VersionsPage() {
           </div>
         </div>
       </header>
+
+      <PlanNavigationTabs planId={planId} currentTab="versions" />
 
       {/* Main Content */}
       <main className="container mx-auto px-4 py-6 sm:px-6">
@@ -445,7 +453,11 @@ export default function VersionsPage() {
                     className="w-full justify-start bg-transparent"
                     asChild
                   >
-                    <Link href={`/plans/${planId}/housing/assumptions`}>
+                    <Link
+                      href={buildScenarioLink(
+                        `/plans/${planId}/housing/assumptions`,
+                      )}
+                    >
                       <Home className="mr-2 h-4 w-4" />
                       住宅前提編集へ
                     </Link>
@@ -455,7 +467,7 @@ export default function VersionsPage() {
                     className="w-full justify-start bg-transparent"
                     asChild
                   >
-                    <Link href={`/plans/${planId}/housing`}>
+                    <Link href={buildScenarioLink(`/plans/${planId}/housing`)}>
                       <BarChart3 className="mr-2 h-4 w-4" />
                       住宅LCC比較へ
                     </Link>

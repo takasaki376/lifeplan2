@@ -14,8 +14,6 @@ import {
   ArrowDownRight,
   ChevronRight,
   Home,
-  History,
-  Menu,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -48,6 +46,7 @@ import {
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Separator } from "@/components/ui/separator";
 import { toast } from "sonner";
+import { PlanNavigationTabs } from "@/components/plan/PlanNavigationTabs";
 import type { LifeEvent, Plan } from "@/lib/domain/types";
 import type { EventTypeKey } from "@/lib/domain/eventTypes";
 import { formatYearMonth, formatYen, getCurrentYearMonth } from "@/lib/format";
@@ -80,7 +79,6 @@ export default function EventsPage() {
   const planId = params.planId as string;
   const repos = useMemo(() => createRepositories(), []);
   const currentYm = getCurrentYearMonth();
-  const tabValue = "events";
 
   const [plan, setPlan] = useState<Plan | null>(null);
   const [events, setEvents] = useState<LifeEvent[]>([]);
@@ -226,20 +224,6 @@ export default function EventsPage() {
     return EVENT_TYPE_LABELS[event.eventType as EventTypeKey] ?? event.eventType;
   };
 
-  const handleTabChange = (value: string) => {
-    const routes: Record<string, string> = {
-      dashboard: `/plans/${planId}`,
-      monthly: `/plans/${planId}/months`,
-      housing: `/plans/${planId}/housing`,
-      events: `/plans/${planId}/events`,
-      versions: `/plans/${planId}/versions`,
-    };
-    const next = routes[value];
-    if (next) {
-      router.push(next);
-    }
-  };
-
   const handleDuplicate = async (eventId: string) => {
     if (duplicatingId) return;
     setDuplicatingId(eventId);
@@ -328,93 +312,7 @@ export default function EventsPage() {
         </div>
       </header>
 
-      {/* Navigation Tabs */}
-      <div className="border-b bg-card">
-        <div className="container mx-auto px-4 sm:px-6">
-          {/* Desktop Tabs */}
-          <div className="hidden sm:block">
-            <Tabs value={tabValue} onValueChange={handleTabChange}>
-              <TabsList className="h-auto w-full justify-start rounded-none border-0 bg-transparent p-0">
-                <TabsTrigger
-                  value="dashboard"
-                  className="gap-2 rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent data-[state=active]:shadow-none"
-                >
-                  <Home className="h-4 w-4" />
-                  ダッシュボード
-                </TabsTrigger>
-                <TabsTrigger
-                  value="monthly"
-                  className="gap-2 rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent data-[state=active]:shadow-none"
-                >
-                  <Calendar className="h-4 w-4" />
-                  月次
-                </TabsTrigger>
-                <TabsTrigger
-                  value="housing"
-                  className="gap-2 rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent data-[state=active]:shadow-none"
-                >
-                  <Home className="h-4 w-4" />
-                  住宅LCC
-                </TabsTrigger>
-                <TabsTrigger
-                  value="events"
-                  className="gap-2 rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent data-[state=active]:shadow-none"
-                >
-                  <Calendar className="h-4 w-4" />
-                  イベント
-                </TabsTrigger>
-                <TabsTrigger
-                  value="versions"
-                  className="gap-2 rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent data-[state=active]:shadow-none"
-                >
-                  <History className="h-4 w-4" />
-                  見直し（改定）
-                </TabsTrigger>
-              </TabsList>
-            </Tabs>
-          </div>
-
-          {/* Mobile Dropdown */}
-          <div className="py-3 sm:hidden">
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <Button
-                  variant="outline"
-                  className="w-full justify-between bg-transparent"
-                >
-                  <span className="flex items-center gap-2">
-                    <Calendar className="h-4 w-4" />
-                    イベント
-                  </span>
-                  <Menu className="h-4 w-4" />
-                </Button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent className="w-56">
-                <DropdownMenuItem onSelect={() => handleTabChange("dashboard")}>
-                  <Home className="mr-2 h-4 w-4" />
-                  ダッシュボード
-                </DropdownMenuItem>
-                <DropdownMenuItem onSelect={() => handleTabChange("monthly")}>
-                  <Calendar className="mr-2 h-4 w-4" />
-                  月次
-                </DropdownMenuItem>
-                <DropdownMenuItem onSelect={() => handleTabChange("housing")}>
-                  <Home className="mr-2 h-4 w-4" />
-                  住宅LCC
-                </DropdownMenuItem>
-                <DropdownMenuItem onSelect={() => handleTabChange("events")}>
-                  <Calendar className="mr-2 h-4 w-4" />
-                  イベント
-                </DropdownMenuItem>
-                <DropdownMenuItem onSelect={() => handleTabChange("versions")}>
-                  <History className="mr-2 h-4 w-4" />
-                  見直し（改定）
-                </DropdownMenuItem>
-              </DropdownMenuContent>
-            </DropdownMenu>
-          </div>
-        </div>
-      </div>
+      <PlanNavigationTabs planId={planId} currentTab="events" />
 
       {/* Main Content */}
       <main className="container mx-auto max-w-7xl px-4 py-8 sm:px-6">
@@ -866,10 +764,6 @@ export default function EventsPage() {
     </div>
   );
 }
-
-
-
-
 
 
 

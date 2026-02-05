@@ -15,10 +15,12 @@ const pushMock = vi.fn();
 const routerMock = {
   push: pushMock,
 };
+let searchParamsInstance = new URLSearchParams();
 
 vi.mock("next/navigation", () => ({
   useParams: () => ({ planId: "plan-123" }),
   useRouter: () => routerMock,
+  useSearchParams: () => searchParamsInstance,
 }));
 
 vi.mock("next/link", () => ({
@@ -140,6 +142,7 @@ describe("MonthlyListPage", () => {
     copyFromPreviousMonthMock.mockReset();
     deleteByYmMock.mockReset();
     pushMock.mockReset();
+    searchParamsInstance = new URLSearchParams();
     toastMock.error.mockReset();
     toastMock.info.mockReset();
     toastMock.success.mockReset();
@@ -234,6 +237,26 @@ describe("MonthlyListPage", () => {
     expect(screen.queryAllByText("入力する")).toHaveLength(0);
   });
 
+  it("preserves scenario when navigating to dashboard or housing tabs", async () => {
+    searchParamsInstance = new URLSearchParams("scenario=optimistic");
+    const user = userEvent.setup();
+
+    render(<MonthlyListPage />);
+
+    await waitFor(() =>
+      expect(screen.getByRole("tab", { name: "ダッシュボード" })).toBeInTheDocument(),
+    );
+
+    await user.click(screen.getByRole("tab", { name: "ダッシュボード" }));
+    expect(pushMock).toHaveBeenCalledWith("/plans/plan-123?scenario=optimistic");
+
+    pushMock.mockClear();
+    await user.click(screen.getByRole("tab", { name: "住宅LCC" }));
+    expect(pushMock).toHaveBeenCalledWith(
+      "/plans/plan-123/housing?scenario=optimistic",
+    );
+  });
+
   it("shows input/edit/detail actions for each month", async () => {
     render(<MonthlyListPage />);
 
@@ -242,13 +265,31 @@ describe("MonthlyListPage", () => {
     );
 
     const inputLinks = screen.getAllByRole("link", { name: "入力する" });
-    expect(inputLinks.some((link) => link.getAttribute("href") === "/plans/plan-123/months/2026-02")).toBe(true);
+    expect(
+      inputLinks.some(
+        (link) =>
+          link.getAttribute("href") ===
+          "/plans/plan-123/months/2026-02?scenario=base",
+      ),
+    ).toBe(true);
 
     const editLinks = screen.getAllByRole("link", { name: "編集" });
-    expect(editLinks.some((link) => link.getAttribute("href") === "/plans/plan-123/months/2026-01")).toBe(true);
+    expect(
+      editLinks.some(
+        (link) =>
+          link.getAttribute("href") ===
+          "/plans/plan-123/months/2026-01?scenario=base",
+      ),
+    ).toBe(true);
 
     const detailLinks = screen.getAllByRole("link", { name: "詳細" });
-    expect(detailLinks.some((link) => link.getAttribute("href") === "/plans/plan-123/months/2026-01/detail")).toBe(true);
+    expect(
+      detailLinks.some(
+        (link) =>
+          link.getAttribute("href") ===
+          "/plans/plan-123/months/2026-01/detail?scenario=base",
+      ),
+    ).toBe(true);
   });
 
   it("shows toast on list load failure", async () => {
@@ -352,7 +393,9 @@ describe("MonthlyListPage", () => {
     await waitFor(() =>
       expect(
         screen.getAllByRole("link", { name: "編集" }).some(
-          (link) => link.getAttribute("href") === "/plans/plan-123/months/2026-02",
+          (link) =>
+            link.getAttribute("href") ===
+            "/plans/plan-123/months/2026-02?scenario=base",
         ),
       ).toBe(true),
     );
@@ -431,7 +474,9 @@ describe("MonthlyListPage", () => {
     await waitFor(() =>
       expect(
         screen.getAllByRole("link", { name: "入力する" }).some(
-          (link) => link.getAttribute("href") === "/plans/plan-123/months/2026-01",
+          (link) =>
+            link.getAttribute("href") ===
+            "/plans/plan-123/months/2026-01?scenario=base",
         ),
       ).toBe(true),
     );

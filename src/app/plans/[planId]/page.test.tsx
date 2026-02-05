@@ -295,7 +295,9 @@ describe("PlanDashboardPage", () => {
 
     await waitFor(() =>
       expect(
-        container.querySelector('a[href="/plans/plan-123/months/current"]')
+        container.querySelector(
+          'a[href="/plans/plan-123/months/current?scenario=base"]',
+        )
       ).toBeTruthy()
     );
   });
@@ -313,11 +315,11 @@ describe("PlanDashboardPage", () => {
     const scoped = within(card as HTMLElement);
     expect(scoped.getByRole("link", { name: "今月を入力" })).toHaveAttribute(
       "href",
-      "/plans/plan-123/months/current"
+      "/plans/plan-123/months/current?scenario=base"
     );
     expect(scoped.getByRole("link", { name: "月次一覧へ" })).toHaveAttribute(
       "href",
-      "/plans/plan-123/months"
+      "/plans/plan-123/months?scenario=base"
     );
   });
 
@@ -333,7 +335,9 @@ describe("PlanDashboardPage", () => {
       expect(screen.getByText("入力済み")).toBeInTheDocument()
     );
     expect(
-      container.querySelector('a[href="/plans/plan-123/months/current"]')
+      container.querySelector(
+        'a[href="/plans/plan-123/months/current?scenario=base"]',
+      )
     ).toBeTruthy();
   });
 
@@ -352,7 +356,7 @@ describe("PlanDashboardPage", () => {
     expect(screen.getByText("-13000000円")).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "残高を更新" })).toHaveAttribute(
       "href",
-      "/plans/plan-123/months/current"
+      "/plans/plan-123/months/current?scenario=base"
     );
   });
 
@@ -362,11 +366,13 @@ describe("PlanDashboardPage", () => {
 
     await waitFor(() =>
       expect(
-        container.querySelector('a[href="/plans/plan-123/housing/assumptions"]')
+        container.querySelector(
+          'a[href="/plans/plan-123/housing/assumptions?scenario=base"]',
+        )
       ).toBeTruthy()
     );
     expect(
-      container.querySelector('a[href="/plans/plan-123/housing"]')
+      container.querySelector('a[href="/plans/plan-123/housing?scenario=base"]')
     ).toBeTruthy();
   });
 
@@ -380,7 +386,9 @@ describe("PlanDashboardPage", () => {
 
     await waitFor(() =>
       expect(
-        container.querySelector('a[href="/plans/plan-123/housing/assumptions"]')
+        container.querySelector(
+          'a[href="/plans/plan-123/housing/assumptions?scenario=base"]',
+        )
       ).toBeTruthy()
     );
   });
@@ -396,7 +404,7 @@ describe("PlanDashboardPage", () => {
 
     await waitFor(() =>
       expect(
-        container.querySelector('a[href="/plans/plan-123/housing"]')
+        container.querySelector('a[href="/plans/plan-123/housing?scenario=base"]')
       ).toBeTruthy()
     );
   });
@@ -418,7 +426,8 @@ describe("PlanDashboardPage", () => {
     const eventLinks = screen.getAllByRole("link", { name: "イベントを追加" });
     expect(
       eventLinks.some(
-        (link) => link.getAttribute("href") === "/plans/plan-123/events/new"
+        (link) =>
+          link.getAttribute("href") === "/plans/plan-123/events/new?scenario=base"
       )
     ).toBe(true);
   });
