@@ -46,7 +46,7 @@ import type {
 } from "@/lib/domain/types";
 import { HOUSING_TYPE_LABELS } from "@/lib/housing";
 import { buildScenarioHref, parseScenario } from "@/lib/scenario";
-import { createRepositories } from "@/lib/repo/factory";
+import { getRepositories } from "@/lib/repo/factory";
 import { toast } from "sonner";
 
 type EditMode = "simple" | "advanced";
@@ -134,7 +134,7 @@ export default function HousingAssumptionsPage() {
   const planId = params.planId as string;
   const scenario = parseScenario(searchParams.get("scenario"));
   const requestedType = searchParams.get("type");
-  const repos = useMemo(() => createRepositories(), []);
+  const repos = getRepositories();
 
   const [planName, setPlanName] = useState("プラン");
   const [isLoading, setIsLoading] = useState(true);
