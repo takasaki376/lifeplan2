@@ -927,7 +927,7 @@ export default function HousingAssumptionsPage() {
 
                   <div className="flex items-center gap-2">
                     <Switch
-                      checked={currentAssumptions.isSelected}
+                      checked={currentAssumptions?.isSelected ?? false}
                       onCheckedChange={handleSelectType}
                     />
                     <Label className="text-sm">
