@@ -468,17 +468,33 @@ export default function HousingAssumptionsPage() {
           <Input
             type="number"
             value={currentAssumptions ? getSimpleRepairAnnual(currentAssumptions) : 0}
-            onChange={(e) =>
+            onChange={(e) => {
+              const amount = toNumber(e.target.value);
+              const existingSchedule = currentAssumptions?.repairsSchedule ?? [];
+              const hasDetailedSchedule =
+                existingSchedule.length > 1 ||
+                (existingSchedule.length === 1 &&
+                  existingSchedule[0]?.cycleYears !== 1);
+
+              if (hasDetailedSchedule) {
+                const proceed = window.confirm(
+                  "詳細な修繕スケジュールが設定されています。この入力を変更すると、既存の修繕スケジュールは「年額」の単純な設定に上書きされます。よろしいですか？"
+                );
+                if (!proceed) {
+                  return;
+                }
+              }
+
               updateHousing(activeType, {
                 repairsSchedule: [
                   {
                     cycleYears: 1,
-                    amountYen: toNumber(e.target.value),
+                    amountYen: amount,
                     memo: "",
                   },
                 ],
-              })
-            }
+              });
+            }}
           />
         </div>
       )}
