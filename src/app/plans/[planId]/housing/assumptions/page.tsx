@@ -71,8 +71,28 @@ const HOUSING_TYPE_ICONS: Record<HousingType, typeof Home> = {
 
 const HOUSING_VIEW_KEY = "housingAssumptionsView";
 
-const cloneHousingMap = (input: HousingByType) =>
-  JSON.parse(JSON.stringify(input)) as HousingByType;
+/**
+ * Deep clone a HousingByType map.
+ *
+ * Uses structuredClone for proper deep cloning. This handles:
+ * - Date objects (if createdAt/updatedAt were Date instead of ISODate strings)
+ * - Nested objects and arrays
+ * - All primitive types
+ *
+ * Note: Currently HousingAssumptions uses ISODate (string) for timestamps,
+ * but this approach is future-proof if the structure changes.
+ *
+ * Fallback: Uses JSON serialization for environments without structuredClone.
+ */
+const cloneHousingMap = (input: HousingByType): HousingByType => {
+  // structuredClone is available in modern browsers and Node 17+
+  if (typeof structuredClone === "function") {
+    return structuredClone(input);
+  }
+
+  // Fallback for older environments (safe for current HousingAssumptions structure)
+  return JSON.parse(JSON.stringify(input)) as HousingByType;
+};
 
 const setHousingMapValue = <T extends HousingType>(
   target: Partial<HousingByType>,
@@ -82,7 +102,9 @@ const setHousingMapValue = <T extends HousingType>(
   target[type] = value;
 };
 
-const isHousingType = (value: string | null | undefined): value is HousingType =>
+const isHousingType = (
+  value: string | null | undefined,
+): value is HousingType =>
   typeof value === "string" && HOUSING_TYPES.includes(value as HousingType);
 
 const toNumber = (value: string) => {
@@ -119,7 +141,9 @@ export default function HousingAssumptionsPage() {
   const [loadError, setLoadError] = useState<string | null>(null);
   const [noCurrentVersion, setNoCurrentVersion] = useState(false);
   const [currentVersionId, setCurrentVersionId] = useState<Id | null>(null);
-  const [housingByType, setHousingByType] = useState<HousingByType | null>(null);
+  const [housingByType, setHousingByType] = useState<HousingByType | null>(
+    null,
+  );
   const [activeType, setActiveType] = useState<HousingType>(
     "high_performance_home",
   );
@@ -318,13 +342,9 @@ export default function HousingAssumptionsPage() {
         );
       }
       if (rollbackError) {
-        descriptionParts.push(
-          "一部のデータは元の状態に戻せませんでした。",
-        );
+        descriptionParts.push("一部のデータは元の状態に戻せませんでした。");
       } else if (succeededTypes.length > 0) {
-        descriptionParts.push(
-          "保存済みのデータは元の状態に戻しました。",
-        );
+        descriptionParts.push("保存済みのデータは元の状態に戻しました。");
       }
       descriptionParts.push("もう一度お試しください。");
       toast("保存に失敗しました", {
@@ -341,7 +361,8 @@ export default function HousingAssumptionsPage() {
   };
 
   const addRepairItem = () => {
-    if (!currentAssumptions || !("repairsSchedule" in currentAssumptions)) return;
+    if (!currentAssumptions || !("repairsSchedule" in currentAssumptions))
+      return;
     const schedule = currentAssumptions.repairsSchedule ?? [];
     updateHousing(activeType, {
       repairsSchedule: [
@@ -355,7 +376,8 @@ export default function HousingAssumptionsPage() {
     index: number,
     patch: { cycleYears?: number; amountYen?: number; memo?: string },
   ) => {
-    if (!currentAssumptions || !("repairsSchedule" in currentAssumptions)) return;
+    if (!currentAssumptions || !("repairsSchedule" in currentAssumptions))
+      return;
     const schedule = currentAssumptions.repairsSchedule ?? [];
     const next = schedule.map((item, idx) =>
       idx === index ? { ...item, ...patch } : item,
@@ -364,7 +386,8 @@ export default function HousingAssumptionsPage() {
   };
 
   const removeRepairItem = (index: number) => {
-    if (!currentAssumptions || !("repairsSchedule" in currentAssumptions)) return;
+    if (!currentAssumptions || !("repairsSchedule" in currentAssumptions))
+      return;
     const schedule = currentAssumptions.repairsSchedule ?? [];
     updateHousing(activeType, {
       repairsSchedule: schedule.filter((_, idx) => idx !== index),
@@ -464,16 +487,22 @@ export default function HousingAssumptionsPage() {
           }
         />
       </div>
-      {(activeType === "high_performance_home" || activeType === "detached") && (
+      {(activeType === "high_performance_home" ||
+        activeType === "detached") && (
         <div className="space-y-1.5">
           <Label>修繕（年額概算）</Label>
           <Input
             type="number"
-            value={currentAssumptions ? getSimpleRepairAnnual(currentAssumptions) : 0}
+            value={
+              currentAssumptions ? getSimpleRepairAnnual(currentAssumptions) : 0
+            }
             onChange={(e) => {
               const amount = toNumberOrZero(e.target.value);
               const repairTarget = currentAssumptions as
-                | Extract<HousingAssumptions, { housingType: "high_performance_home" }>
+                | Extract<
+                    HousingAssumptions,
+                    { housingType: "high_performance_home" }
+                  >
                 | Extract<HousingAssumptions, { housingType: "detached" }>;
               const existingSchedule = repairTarget.repairsSchedule ?? [];
               const hasDetailedSchedule =
@@ -483,7 +512,7 @@ export default function HousingAssumptionsPage() {
 
               if (hasDetailedSchedule) {
                 const proceed = window.confirm(
-                  "詳細な修繕スケジュールが設定されています。この入力を変更すると、既存の修繕スケジュールは「年額」の単純な設定に上書きされます。よろしいですか？"
+                  "詳細な修繕スケジュールが設定されています。この入力を変更すると、既存の修繕スケジュールは「年額」の単純な設定に上書きされます。よろしいですか？",
                 );
                 if (!proceed) {
                   return;
@@ -584,7 +613,9 @@ export default function HousingAssumptionsPage() {
       <div className="space-y-1.5">
         <Label>返済方式</Label>
         <Select
-          value={(currentAssumptions?.repaymentType ?? "annuity") as RepaymentType}
+          value={
+            (currentAssumptions?.repaymentType ?? "annuity") as RepaymentType
+          }
           onValueChange={(value) =>
             updateHousing(activeType, {
               repaymentType: value as RepaymentType,
@@ -788,10 +819,7 @@ export default function HousingAssumptionsPage() {
         </div>
         <div className="space-y-2">
           {schedule.map((item, index) => (
-            <div
-              key={index}
-              className="grid grid-cols-12 gap-2 items-start"
-            >
+            <div key={index} className="grid grid-cols-12 gap-2 items-start">
               <div className="col-span-3">
                 <Input
                   type="number"
@@ -970,7 +998,10 @@ export default function HousingAssumptionsPage() {
           <div className="lg:col-span-8 space-y-6">
             <Card>
               <CardHeader className="space-y-4">
-                <Tabs value={activeType} onValueChange={(v) => setActiveType(v as HousingType)}>
+                <Tabs
+                  value={activeType}
+                  onValueChange={(v) => setActiveType(v as HousingType)}
+                >
                   <TabsList className="grid w-full grid-cols-4">
                     {HOUSING_TYPES.map((type) => {
                       const ItemIcon = HOUSING_TYPE_ICONS[type];
@@ -985,7 +1016,10 @@ export default function HousingAssumptionsPage() {
                 </Tabs>
 
                 <div className="flex flex-wrap items-center justify-between gap-3">
-                  <Tabs value={editMode} onValueChange={(v) => setEditMode(v as EditMode)}>
+                  <Tabs
+                    value={editMode}
+                    onValueChange={(v) => setEditMode(v as EditMode)}
+                  >
                     <TabsList>
                       <TabsTrigger value="simple">かんたん</TabsTrigger>
                       <TabsTrigger value="advanced">詳細</TabsTrigger>
