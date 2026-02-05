@@ -128,6 +128,104 @@ const getSimpleRepairAnnual = (item: HousingAssumptions) => {
   return 0;
 };
 
+const validateHousing = (items: HousingByType): string[] => {
+  const errors: string[] = [];
+  const isNegative = (value?: number) =>
+    typeof value === "number" && value < 0;
+  const isRateInvalid = (value?: number) =>
+    typeof value === "number" && (value < 0 || value > 1);
+  const isTermInvalid = (value?: number) =>
+    typeof value === "number" && value < 1;
+
+  for (const type of HOUSING_TYPES) {
+    const item = items[type];
+    const label = HOUSING_TYPE_LABELS[type] ?? type;
+
+    if (isNegative(item.initialCostYen)) {
+      errors.push(`${label}: 購入価格が負の値です。`);
+    }
+    if (isNegative(item.downPaymentYen)) {
+      errors.push(`${label}: 頭金が負の値です。`);
+    }
+    if (isNegative(item.closingCostYen)) {
+      errors.push(`${label}: 諸費用が負の値です。`);
+    }
+    if (isNegative(item.loanPrincipalYen)) {
+      errors.push(`${label}: ローン元本が負の値です。`);
+    }
+    if (isRateInvalid(item.loanInterestRate)) {
+      errors.push(`${label}: 金利は0〜100%の範囲で入力してください。`);
+    }
+    if (isTermInvalid(item.loanTermMonths)) {
+      errors.push(`${label}: ローン期間は1ヶ月以上で入力してください。`);
+    }
+    if (isNegative(item.propertyTaxAnnualYen)) {
+      errors.push(`${label}: 固定資産税が負の値です。`);
+    }
+    if (isNegative(item.utilitiesBaseMonthlyYen)) {
+      errors.push(`${label}: 光熱費が負の値です。`);
+    }
+    if (isNegative(item.utilitiesFactor)) {
+      errors.push(`${label}: 住宅性能係数が負の値です。`);
+    }
+
+    if (item.housingType === "condo") {
+      const spec = item.typeSpecific ?? {};
+      if (isNegative(spec.managementFeeMonthlyYen)) {
+        errors.push(`${label}: 管理費が負の値です。`);
+      }
+      if (isNegative(spec.repairReserveMonthlyYen)) {
+        errors.push(`${label}: 修繕積立が負の値です。`);
+      }
+      if (isNegative(spec.parkingFeeMonthlyYen)) {
+        errors.push(`${label}: 駐車場が負の値です。`);
+      }
+    }
+
+    if (item.housingType === "rent") {
+      const spec = item.typeSpecific ?? {};
+      if (isNegative(spec.rentMonthlyYen)) {
+        errors.push(`${label}: 家賃が負の値です。`);
+      }
+      if (isRateInvalid(spec.rentIncreaseRateAnnual)) {
+        errors.push(`${label}: 家賃上昇率は0〜100%の範囲で入力してください。`);
+      }
+      if (isNegative(spec.movingCostYen)) {
+        errors.push(`${label}: 引越費用が負の値です。`);
+      }
+      if (isNegative(spec.renewalFeeYen)) {
+        errors.push(`${label}: 更新料が負の値です。`);
+      }
+      if (isTermInvalid(spec.renewalCycleYears)) {
+        errors.push(`${label}: 更新周期は1年以上で入力してください。`);
+      }
+      if (isNegative(spec.depositYen)) {
+        errors.push(`${label}: 敷金が負の値です。`);
+      }
+      if (isNegative(spec.keyMoneyYen)) {
+        errors.push(`${label}: 礼金が負の値です。`);
+      }
+    }
+
+    if (
+      item.housingType === "high_performance_home" ||
+      item.housingType === "detached"
+    ) {
+      const schedule = item.repairsSchedule ?? [];
+      schedule.forEach((entry, idx) => {
+        if (entry.cycleYears < 1) {
+          errors.push(`${label}: 修繕スケジュール${idx + 1}の周期が不正です。`);
+        }
+        if (entry.amountYen < 0) {
+          errors.push(`${label}: 修繕スケジュール${idx + 1}の金額が負の値です。`);
+        }
+      });
+    }
+  }
+
+  return errors;
+};
+
 export default function HousingAssumptionsPage() {
   const params = useParams();
   const searchParams = useSearchParams();
@@ -295,6 +393,13 @@ export default function HousingAssumptionsPage() {
 
   const handleSave = async () => {
     if (!currentVersionId || !housingByType) return;
+    const validationErrors = validateHousing(housingByType);
+    if (validationErrors.length > 0) {
+      toast("入力エラーがあります", {
+        description: validationErrors[0],
+      });
+      return;
+    }
     const succeededTypes: HousingType[] = [];
     let failedType: HousingType | null = null;
     try {
