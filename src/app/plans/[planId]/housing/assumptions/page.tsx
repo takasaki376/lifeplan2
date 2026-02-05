@@ -86,8 +86,10 @@ const isHousingType = (value: string | null | undefined): value is HousingType =
   typeof value === "string" && HOUSING_TYPES.includes(value as HousingType);
 
 const toNumber = (value: string) => {
-  const parsed = Number(value);
-  return Number.isFinite(parsed) ? parsed : 0;
+  const trimmed = value.trim();
+  if (trimmed === "") return undefined;
+  const parsed = Number(trimmed);
+  return Number.isFinite(parsed) ? parsed : undefined;
 };
 
 const getLoanYears = (months: number | undefined) =>
