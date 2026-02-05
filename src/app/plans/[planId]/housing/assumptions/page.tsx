@@ -267,21 +267,65 @@ export default function HousingAssumptionsPage() {
 
   const handleSave = async () => {
     if (!currentVersionId || !housingByType) return;
+    const succeededTypes: HousingType[] = [];
+    let failedType: HousingType | null = null;
     try {
       for (const type of HOUSING_TYPES) {
         const item = housingByType[type];
-        await repos.housing.upsert({
-          ...item,
-          planVersionId: currentVersionId,
-          housingType: type,
-        });
+        try {
+          await repos.housing.upsert({
+            ...item,
+            planVersionId: currentVersionId,
+            housingType: type,
+          });
+          succeededTypes.push(type);
+        } catch (error) {
+          failedType = type;
+          throw error;
+        }
       }
       initialSnapshotRef.current = cloneHousingMap(housingByType);
       setIsDirty(false);
       toast("保存しました", { description: "前提が更新されました。" });
     } catch (error) {
       console.error(error);
-      toast("保存に失敗しました", { description: "もう一度お試しください。" });
+      let rollbackError: unknown = null;
+      if (initialSnapshotRef.current && succeededTypes.length > 0) {
+        try {
+          for (const type of succeededTypes) {
+            const snapshotItem = initialSnapshotRef.current[type];
+            if (!snapshotItem) continue;
+            await repos.housing.upsert({
+              ...snapshotItem,
+              planVersionId: currentVersionId,
+              housingType: type,
+            });
+          }
+        } catch (rbErr) {
+          console.error("Failed to rollback housing assumptions", rbErr);
+          rollbackError = rbErr;
+        }
+      }
+      const descriptionParts: string[] = [];
+      if (failedType) {
+        const label = HOUSING_TYPE_LABELS[failedType] ?? failedType;
+        descriptionParts.push(
+          `住宅タイプ「${label}」の保存中にエラーが発生しました。`,
+        );
+      }
+      if (rollbackError) {
+        descriptionParts.push(
+          "一部のデータは元の状態に戻せませんでした。",
+        );
+      } else if (succeededTypes.length > 0) {
+        descriptionParts.push(
+          "保存済みのデータは元の状態に戻しました。",
+        );
+      }
+      descriptionParts.push("もう一度お試しください。");
+      toast("保存に失敗しました", {
+        description: descriptionParts.join(" "),
+      });
     }
   };
 
