@@ -15,7 +15,6 @@ import {
   CheckCircle2,
   Settings,
   TrendingUp,
-  Menu,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
@@ -29,12 +28,6 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Separator } from "@/components/ui/separator";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import {
   formatYearMonth,
@@ -61,10 +54,10 @@ import {
 } from "@/lib/scenario";
 import type { ScenarioKey } from "@/lib/scenario";
 import { useScenarioNavigation } from "@/lib/hooks/useScenarioNavigation";
-import { useTabNavigation } from "@/lib/hooks/useTabNavigation";
 import { computeNextActions, REQUIRED_HOUSING_TYPES } from "@/lib/dashboard";
 import { calcLcc } from "@/lib/calc/lcc/calcLcc";
 import type { ScenarioAssumptionsSet } from "@/lib/repo/types";
+import { PlanNavigationTabs } from "@/components/plan/PlanNavigationTabs";
 
 type DashboardState =
   | "FIRST_TIME"
@@ -81,6 +74,11 @@ export default function PlanDashboardPage() {
   const currentYm = getCurrentYearMonth();
   const scenarioParam = searchParams.get("scenario");
   const parsedScenario = parseScenario(scenarioParam);
+  const buildScenarioHref = (base: string, params?: Record<string, string>) => {
+    const search = new URLSearchParams(params);
+    search.set("scenario", parsedScenario);
+    return `${base}?${search.toString()}`;
+  };
 
   const [plan, setPlan] = useState<Plan | null>(null);
   const [currentVersion, setCurrentVersion] = useState<PlanVersion | null>(
@@ -106,9 +104,7 @@ export default function PlanDashboardPage() {
   const [dashboardState, setDashboardState] = useState<DashboardState>("READY");
   const [isLoading, setIsLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
-  const [selectedTab, setSelectedTab] = useState("dashboard");
   const { changeScenario } = useScenarioNavigation();
-  const { changeTab } = useTabNavigation(planId);
 
   const planName = plan?.name ?? "プラン";
 
@@ -412,93 +408,7 @@ export default function PlanDashboardPage() {
         </div>
       </header>
 
-      {/* Navigation Tabs */}
-      <div className="border-b bg-card">
-        <div className="container mx-auto px-4 sm:px-6">
-          {/* Desktop Tabs */}
-          <div className="hidden sm:block">
-            <Tabs value={selectedTab} onValueChange={changeTab}>
-              <TabsList className="h-auto w-full justify-start rounded-none border-0 bg-transparent p-0">
-                <TabsTrigger
-                  value="dashboard"
-                  className="gap-2 rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent data-[state=active]:shadow-none"
-                >
-                  <Home className="h-4 w-4" />
-                  ダッシュボード
-                </TabsTrigger>
-                <TabsTrigger
-                  value="monthly"
-                  className="gap-2 rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent data-[state=active]:shadow-none"
-                >
-                  <Calendar className="h-4 w-4" />
-                  月次
-                </TabsTrigger>
-                <TabsTrigger
-                  value="housing"
-                  className="gap-2 rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent data-[state=active]:shadow-none"
-                >
-                  <Home className="h-4 w-4" />
-                  住宅LCC
-                </TabsTrigger>
-                <TabsTrigger
-                  value="events"
-                  className="gap-2 rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent data-[state=active]:shadow-none"
-                >
-                  <Calendar className="h-4 w-4" />
-                  イベント
-                </TabsTrigger>
-                <TabsTrigger
-                  value="versions"
-                  className="gap-2 rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent data-[state=active]:shadow-none"
-                >
-                  <History className="h-4 w-4" />
-                  見直し（改定）
-                </TabsTrigger>
-              </TabsList>
-            </Tabs>
-          </div>
-
-          {/* Mobile Dropdown */}
-          <div className="py-3 sm:hidden">
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <Button
-                  variant="outline"
-                  className="w-full justify-between bg-transparent"
-                >
-                  <span className="flex items-center gap-2">
-                    <Home className="h-4 w-4" />
-                    ダッシュボード
-                  </span>
-                  <Menu className="h-4 w-4" />
-                </Button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent className="w-56">
-                <DropdownMenuItem onSelect={() => changeTab("dashboard")}>
-                  <Home className="mr-2 h-4 w-4" />
-                  ダッシュボード
-                </DropdownMenuItem>
-                <DropdownMenuItem onSelect={() => changeTab("monthly")}>
-                  <Calendar className="mr-2 h-4 w-4" />
-                  月次
-                </DropdownMenuItem>
-                <DropdownMenuItem onSelect={() => changeTab("housing")}>
-                  <Home className="mr-2 h-4 w-4" />
-                  住宅LCC
-                </DropdownMenuItem>
-                <DropdownMenuItem onSelect={() => changeTab("events")}>
-                  <Calendar className="mr-2 h-4 w-4" />
-                  イベント
-                </DropdownMenuItem>
-                <DropdownMenuItem onSelect={() => changeTab("versions")}>
-                  <History className="mr-2 h-4 w-4" />
-                  見直し（改定）
-                </DropdownMenuItem>
-              </DropdownMenuContent>
-            </DropdownMenu>
-          </div>
-        </div>
-      </div>
+      <PlanNavigationTabs planId={planId} currentTab="dashboard" />
       {/* Main Content */}
       <main className="container mx-auto px-4 py-6 sm:px-6 sm:py-8">
         {loadError ? (
@@ -557,7 +467,7 @@ export default function PlanDashboardPage() {
                       </Link>
                     </Button>
                     <Button asChild variant="outline">
-                      <Link href={`/plans/${planId}/housing`}>
+                      <Link href={buildScenarioHref(`/plans/${planId}/housing`)}>
                         比較トップへ
                       </Link>
                     </Button>
@@ -573,7 +483,7 @@ export default function PlanDashboardPage() {
                   </CardHeader>
                   <CardFooter>
                     <Button asChild>
-                      <Link href={`/plans/${planId}/housing`}>
+                      <Link href={buildScenarioHref(`/plans/${planId}/housing`)}>
                         住宅LCC比較へ
                       </Link>
                     </Button>
@@ -955,7 +865,7 @@ export default function PlanDashboardPage() {
                       variant="default"
                       className="flex-1 sm:flex-none"
                     >
-                      <Link href={`/plans/${planId}/housing`}>
+                      <Link href={buildScenarioHref(`/plans/${planId}/housing`)}>
                         住宅LCC比較へ
                       </Link>
                     </Button>

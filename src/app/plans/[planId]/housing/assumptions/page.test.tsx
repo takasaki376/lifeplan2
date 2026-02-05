@@ -5,10 +5,12 @@ import { HOUSING_TYPE_LABELS } from "@/lib/housing";
 import HousingAssumptionsPage from "./page";
 
 const pushMock = vi.fn();
+let searchParamsInstance = new URLSearchParams();
 
 vi.mock("next/navigation", () => ({
   useParams: () => ({ planId: "plan-123" }),
   useRouter: () => ({ push: pushMock }),
+  useSearchParams: () => searchParamsInstance,
 }));
 
 vi.mock("next/link", () => ({
@@ -49,6 +51,7 @@ describe("HousingAssumptionsPage", () => {
 
   afterEach(() => {
     cleanup();
+    searchParamsInstance = new URLSearchParams();
   });
 
   it("renders links for navigation and housing tabs", () => {

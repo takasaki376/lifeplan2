@@ -24,10 +24,12 @@ const pushMock = vi.fn();
 const routerMock = {
   push: pushMock,
 };
+let searchParamsInstance = new URLSearchParams();
 
 vi.mock("next/navigation", () => ({
   useParams: () => ({ planId: "plan-123" }),
   useRouter: () => routerMock,
+  useSearchParams: () => searchParamsInstance,
 }));
 
 vi.mock("next/link", () => ({
@@ -171,6 +173,7 @@ describe("EventsPage", () => {
     eventDuplicateMock.mockReset();
     eventDeleteMock.mockReset();
     pushMock.mockReset();
+    searchParamsInstance = new URLSearchParams();
     vi.mocked(toast.error).mockReset();
     vi.mocked(toast.success).mockReset();
 
@@ -213,6 +216,26 @@ describe("EventsPage", () => {
     expect(eventListByVersionMock).toHaveBeenCalledWith("ver-1", {
       scope: "all",
     });
+  });
+
+  it("preserves scenario when navigating to dashboard or housing tabs", async () => {
+    searchParamsInstance = new URLSearchParams("scenario=optimistic");
+    const user = userEvent.setup();
+
+    render(<EventsPage />);
+
+    await waitFor(() =>
+      expect(screen.getByRole("tab", { name: "ダッシュボード" })).toBeInTheDocument(),
+    );
+
+    await user.click(screen.getByRole("tab", { name: "ダッシュボード" }));
+    expect(pushMock).toHaveBeenCalledWith("/plans/plan-123?scenario=optimistic");
+
+    pushMock.mockClear();
+    await user.click(screen.getByRole("tab", { name: "住宅LCC" }));
+    expect(pushMock).toHaveBeenCalledWith(
+      "/plans/plan-123/housing?scenario=optimistic",
+    );
   });
 
   it("filters events by time tabs", async () => {

@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { useParams, useRouter } from "next/navigation";
+import { useParams, useRouter, useSearchParams } from "next/navigation";
 import {
   ChevronRight,
   Plus,
@@ -34,6 +34,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { PlanNavigationTabs } from "@/components/plan/PlanNavigationTabs";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -107,7 +108,15 @@ const MOCK_VERSIONS: Version[] = [
 export default function VersionsPage() {
   const params = useParams();
   const router = useRouter();
+  const searchParams = useSearchParams();
   const planId = params.planId as string;
+  const scenarioParam = searchParams.get("scenario");
+  const buildScenarioHref = (base: string) => {
+    if (!scenarioParam) return base;
+    const search = new URLSearchParams();
+    search.set("scenario", scenarioParam);
+    return `${base}?${search.toString()}`;
+  };
 
   const [tab, setTab] = useState<"all" | "current" | "archived">("all");
   const [searchQuery, setSearchQuery] = useState("");
@@ -193,7 +202,7 @@ export default function VersionsPage() {
             </div>
             <div className="flex gap-2">
               <Button variant="outline" size="sm" asChild>
-                <Link href={`/plans/${planId}`}>
+                <Link href={buildScenarioHref(`/plans/${planId}`)}>
                   <Home className="mr-2 h-4 w-4" />
                   ダッシュボードへ
                 </Link>
@@ -208,6 +217,8 @@ export default function VersionsPage() {
           </div>
         </div>
       </header>
+
+      <PlanNavigationTabs planId={planId} currentTab="versions" />
 
       {/* Main Content */}
       <main className="container mx-auto px-4 py-6 sm:px-6">

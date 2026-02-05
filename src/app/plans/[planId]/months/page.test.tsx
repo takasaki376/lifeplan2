@@ -15,10 +15,12 @@ const pushMock = vi.fn();
 const routerMock = {
   push: pushMock,
 };
+let searchParamsInstance = new URLSearchParams();
 
 vi.mock("next/navigation", () => ({
   useParams: () => ({ planId: "plan-123" }),
   useRouter: () => routerMock,
+  useSearchParams: () => searchParamsInstance,
 }));
 
 vi.mock("next/link", () => ({
@@ -140,6 +142,7 @@ describe("MonthlyListPage", () => {
     copyFromPreviousMonthMock.mockReset();
     deleteByYmMock.mockReset();
     pushMock.mockReset();
+    searchParamsInstance = new URLSearchParams();
     toastMock.error.mockReset();
     toastMock.info.mockReset();
     toastMock.success.mockReset();
@@ -232,6 +235,26 @@ describe("MonthlyListPage", () => {
       ).toBeGreaterThan(0),
     );
     expect(screen.queryAllByText("入力する")).toHaveLength(0);
+  });
+
+  it("preserves scenario when navigating to dashboard or housing tabs", async () => {
+    searchParamsInstance = new URLSearchParams("scenario=optimistic");
+    const user = userEvent.setup();
+
+    render(<MonthlyListPage />);
+
+    await waitFor(() =>
+      expect(screen.getByRole("tab", { name: "ダッシュボード" })).toBeInTheDocument(),
+    );
+
+    await user.click(screen.getByRole("tab", { name: "ダッシュボード" }));
+    expect(pushMock).toHaveBeenCalledWith("/plans/plan-123?scenario=optimistic");
+
+    pushMock.mockClear();
+    await user.click(screen.getByRole("tab", { name: "住宅LCC" }));
+    expect(pushMock).toHaveBeenCalledWith(
+      "/plans/plan-123/housing?scenario=optimistic",
+    );
   });
 
   it("shows input/edit/detail actions for each month", async () => {

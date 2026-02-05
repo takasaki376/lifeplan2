@@ -14,7 +14,7 @@ let searchParamsInstance = new URLSearchParams();
 
 const planGetMock = vi.fn();
 const versionGetCurrentMock = vi.fn();
-const versionEnsureScenarioSetMock = vi.fn();
+const versionGetScenarioSetMock = vi.fn();
 const housingListByVersionMock = vi.fn();
 const housingApplyPresetMock = vi.fn();
 const housingSetSelectedMock = vi.fn();
@@ -33,7 +33,7 @@ vi.mock("@/lib/repo/factory", () => ({
     },
     version: {
       getCurrent: versionGetCurrentMock,
-      ensureScenarioSet: versionEnsureScenarioSetMock,
+      getScenarioSet: versionGetScenarioSetMock,
     },
     housing: {
       listByVersion: housingListByVersionMock,
@@ -94,7 +94,7 @@ describe("HousingLCCPage", () => {
       isCurrent: true,
       createdAt: new Date().toISOString(),
     });
-    versionEnsureScenarioSetMock.mockResolvedValue({
+    versionGetScenarioSetMock.mockResolvedValue({
       conservative: undefined,
       base: undefined,
       optimistic: undefined,
@@ -211,6 +211,24 @@ describe("HousingLCCPage", () => {
     const calledArg = replaceMock.mock.calls[0]?.[0];
     const normalizedArg = Array.isArray(calledArg) ? calledArg[0] : calledArg;
     expect(normalizedArg).toBe("/plans/plan-123/housing?scenario=conservative");
+  });
+
+  it("preserves scenario when dashboard tab is clicked", async () => {
+    searchParamsInstance = new URLSearchParams("scenario=optimistic");
+    const user = userEvent.setup();
+
+    render(<HousingLCCPage />);
+
+    await waitFor(() =>
+      expect(screen.getByRole("tab", { name: "ダッシュボード" })).toBeInTheDocument()
+    );
+
+    await user.click(screen.getByRole("tab", { name: "ダッシュボード" }));
+
+    await waitFor(() => expect(pushMock).toHaveBeenCalled());
+    const calledArg = pushMock.mock.calls[0]?.[0];
+    const normalizedArg = Array.isArray(calledArg) ? calledArg[0] : calledArg;
+    expect(normalizedArg).toBe("/plans/plan-123?scenario=optimistic");
   });
 
   it("displays message when getCurrent returns undefined (no current version)", async () => {

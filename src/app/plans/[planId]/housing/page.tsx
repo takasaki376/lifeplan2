@@ -14,9 +14,6 @@ import {
   Building2,
   Building,
   KeyRound,
-  Calendar,
-  History,
-  Menu,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
@@ -27,12 +24,6 @@ import {
 } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
 import {
   Select,
   SelectContent,
@@ -47,6 +38,7 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { Alert, AlertDescription } from "@/components/ui/alert";
+import { PlanNavigationTabs } from "@/components/plan/PlanNavigationTabs";
 import type {
   HousingAssumptions,
   HousingType,
@@ -58,13 +50,13 @@ import { formatYen } from "@/lib/format";
 import { HOUSING_TYPE_LABELS } from "@/lib/housing";
 import { createRepositories } from "@/lib/repo/factory";
 import type { ScenarioAssumptionsSet } from "@/lib/repo/types";
+import { DEFAULT_SCENARIO_SET } from "@/lib/domain/defaults/scenario";
 import {
   formatScenarioLabel,
   parseScenario,
   scenarioKeys,
 } from "@/lib/scenario";
 import { useScenarioNavigation } from "@/lib/hooks/useScenarioNavigation";
-import { useTabNavigation } from "@/lib/hooks/useTabNavigation";
 
 const HOUSING_TYPES: HousingType[] = [
   "high_performance_home",
@@ -88,10 +80,8 @@ export default function HousingLCCPage() {
   const searchParams = useSearchParams();
   const planId = params.planId as string;
   const repos = useMemo(() => createRepositories(), []);
-  const tabValue = "housing";
   const [planName, setPlanName] = useState("プラン");
   const { changeScenario } = useScenarioNavigation();
-  const { changeTab } = useTabNavigation(planId);
 
   const scenarioParam = searchParams.get("scenario");
   const parsedScenario = parseScenario(scenarioParam);
@@ -128,9 +118,13 @@ export default function HousingLCCPage() {
         }
 
         setCurrentVersionId(currentVersion.id);
-        const ensuredScenarioSet =
-          await repos.version.ensureScenarioSet(currentVersion.id);
-        setScenarioSet(ensuredScenarioSet);
+        let scenario: ScenarioAssumptionsSet | null = null;
+        try {
+          scenario = await repos.version.getScenarioSet(currentVersion.id);
+        } catch (error) {
+          console.error(error);
+        }
+        setScenarioSet(scenario);
 
         let list = await repos.housing.listByVersion(currentVersion.id);
         const missingTypes = HOUSING_TYPES.filter(
@@ -171,7 +165,23 @@ export default function HousingLCCPage() {
   }, [planId, repos]);
 
   const horizonMonths = Number.parseInt(horizonYears, 10) * 12;
-  const scenario = scenarioSet?.[parsedScenario];
+  const fallbackScenario = useMemo(() => {
+    if (!currentVersionId) return undefined;
+    const base = DEFAULT_SCENARIO_SET.base;
+    return {
+      id: `fallback-${currentVersionId}`,
+      planVersionId: currentVersionId,
+      createdAt: new Date().toISOString(),
+      ...base,
+      utilitiesIncreaseRateAnnual:
+        base.utilitiesIncreaseRateAnnual ?? base.inflationRate,
+    };
+  }, [currentVersionId]);
+  const scenarioAssumptions =
+    scenarioSet?.[parsedScenario] ?? scenarioSet?.base ?? fallbackScenario;
+  const scenarioFallbackUsed = Boolean(
+    !scenarioSet || !scenarioSet[parsedScenario],
+  );
   const buildScenarioHref = (base: string, params?: Record<string, string>) => {
     const search = new URLSearchParams(params);
     search.set("scenario", parsedScenario);
@@ -183,13 +193,13 @@ export default function HousingLCCPage() {
     for (const item of housingList) {
       const result = calcLcc({
         housing: item,
-        scenario,
+        scenario: scenarioAssumptions,
         horizonMonths,
       });
       map.set(item.housingType, result);
     }
     return map;
-  }, [housingList, scenario, horizonMonths]);
+  }, [housingList, scenarioAssumptions, horizonMonths]);
 
   const orderedHousing = HOUSING_TYPES.map((type) =>
     housingList.find((item) => item.housingType === type),
@@ -399,93 +409,7 @@ export default function HousingLCCPage() {
           </div>
         </div>
 
-        {/* Navigation Tabs */}
-        <div className="border-b bg-card mb-6">
-          <div className="px-4 sm:px-6">
-            {/* Desktop Tabs */}
-            <div className="hidden sm:block">
-              <Tabs value={tabValue} onValueChange={changeTab}>
-                <TabsList className="h-auto w-full justify-start rounded-none border-0 bg-transparent p-0">
-                  <TabsTrigger
-                    value="dashboard"
-                    className="gap-2 rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent data-[state=active]:shadow-none"
-                  >
-                    <Home className="h-4 w-4" />
-                    ダッシュボード
-                  </TabsTrigger>
-                  <TabsTrigger
-                    value="monthly"
-                    className="gap-2 rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent data-[state=active]:shadow-none"
-                  >
-                    <Calendar className="h-4 w-4" />
-                    月次
-                  </TabsTrigger>
-                  <TabsTrigger
-                    value="housing"
-                    className="gap-2 rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent data-[state=active]:shadow-none"
-                  >
-                    <Home className="h-4 w-4" />
-                    住宅LCC
-                  </TabsTrigger>
-                  <TabsTrigger
-                    value="events"
-                    className="gap-2 rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent data-[state=active]:shadow-none"
-                  >
-                    <Calendar className="h-4 w-4" />
-                    イベント
-                  </TabsTrigger>
-                  <TabsTrigger
-                    value="versions"
-                    className="gap-2 rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent data-[state=active]:shadow-none"
-                  >
-                    <History className="h-4 w-4" />
-                    見直し（改定）
-                  </TabsTrigger>
-                </TabsList>
-              </Tabs>
-            </div>
-
-            {/* Mobile Dropdown */}
-            <div className="py-3 sm:hidden">
-              <DropdownMenu>
-                <DropdownMenuTrigger asChild>
-                  <Button
-                    variant="outline"
-                    className="w-full justify-between bg-transparent"
-                  >
-                    <span className="flex items-center gap-2">
-                      <Home className="h-4 w-4" />
-                      住宅LCC
-                    </span>
-                    <Menu className="h-4 w-4" />
-                  </Button>
-                </DropdownMenuTrigger>
-                <DropdownMenuContent className="w-56">
-                  <DropdownMenuItem onSelect={() => changeTab("dashboard")}>
-                    <Home className="mr-2 h-4 w-4" />
-                    ダッシュボード
-                  </DropdownMenuItem>
-                  <DropdownMenuItem onSelect={() => changeTab("monthly")}>
-                    <Calendar className="mr-2 h-4 w-4" />
-                    月次
-                  </DropdownMenuItem>
-                  <DropdownMenuItem onSelect={() => changeTab("housing")}>
-                    <Home className="mr-2 h-4 w-4" />
-                    住宅LCC
-                  </DropdownMenuItem>
-                  <DropdownMenuItem onSelect={() => changeTab("events")}>
-                    <Calendar className="mr-2 h-4 w-4" />
-                    イベント
-                  </DropdownMenuItem>
-                  <DropdownMenuItem onSelect={() => changeTab("versions")}>
-                    <History className="mr-2 h-4 w-4" />
-                    見直し（改定）
-                  </DropdownMenuItem>
-                </DropdownMenuContent>
-              </DropdownMenu>
-            </div>
-          </div>
-        </div>
+        <PlanNavigationTabs planId={planId} currentTab="housing" />
 
         {!hasSelected && (
           <Alert className="mb-6">
@@ -517,7 +441,10 @@ export default function HousingLCCPage() {
 
             <div className="flex items-center gap-2">
               <span className="text-sm font-semibold">
-                {horizonYears}年累計 LCC（{formatScenarioLabel(parsedScenario)}
+                {horizonYears}年累計 LCC（
+                {formatScenarioLabel(
+                  scenarioAssumptions?.scenarioKey ?? parsedScenario,
+                )}
                 ）:
               </span>
               <span className="text-lg font-bold">
@@ -542,11 +469,22 @@ export default function HousingLCCPage() {
 
             <div className="flex gap-2">
               <Button size="sm" variant="ghost" asChild>
-                <Link href={`/plans/${planId}`}>ダッシュボードへ戻る</Link>
+                <Link href={buildScenarioHref(`/plans/${planId}`)}>
+                  ダッシュボードへ戻る
+                </Link>
               </Button>
             </div>
           </CardContent>
         </Card>
+
+        {scenarioFallbackUsed && (
+          <Alert className="mb-6">
+            <AlertTriangle className="h-4 w-4" />
+            <AlertDescription className="ml-2">
+              シナリオ前提が不足しているため標準で表示しています。
+            </AlertDescription>
+          </Alert>
+        )}
 
         {/* Comparison Cards */}
         <div className="mb-6 grid gap-4 sm:grid-cols-2">

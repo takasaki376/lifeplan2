@@ -366,7 +366,7 @@ describe("PlanDashboardPage", () => {
       ).toBeTruthy()
     );
     expect(
-      container.querySelector('a[href="/plans/plan-123/housing"]')
+      container.querySelector('a[href="/plans/plan-123/housing?scenario=base"]')
     ).toBeTruthy();
   });
 
@@ -396,7 +396,7 @@ describe("PlanDashboardPage", () => {
 
     await waitFor(() =>
       expect(
-        container.querySelector('a[href="/plans/plan-123/housing"]')
+        container.querySelector('a[href="/plans/plan-123/housing?scenario=base"]')
       ).toBeTruthy()
     );
   });
