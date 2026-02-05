@@ -722,7 +722,7 @@ export default function HousingAssumptionsPage() {
         <div className="space-y-2">
           {schedule.map((item, index) => (
             <div
-              key={`${item.cycleYears}-${index}`}
+              key={index}
               className="grid grid-cols-12 gap-2 items-start"
             >
               <div className="col-span-3">
