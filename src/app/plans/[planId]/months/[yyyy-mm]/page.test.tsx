@@ -8,10 +8,13 @@ const planGetMock = vi.fn();
 const monthlyGetByYmMock = vi.fn();
 const monthlyUpsertByYmMock = vi.fn();
 const pushMock = vi.fn();
+let searchParamsInstance = new URLSearchParams();
 
 vi.mock("next/navigation", () => ({
   useParams: () => ({ planId: "plan-123", "yyyy-mm": "2026-01" }),
   useRouter: () => ({ push: pushMock }),
+  useSearchParams: () => searchParamsInstance,
+  usePathname: () => "/plans/plan-123/months/2026-01",
 }));
 
 vi.mock("next/link", () => ({
@@ -64,6 +67,7 @@ describe("MonthlyInputSpecificMonthPage balance display", () => {
 
   afterEach(() => {
     cleanup();
+    searchParamsInstance = new URLSearchParams();
   });
 
   it("shows balance when both income and expense are entered", async () => {

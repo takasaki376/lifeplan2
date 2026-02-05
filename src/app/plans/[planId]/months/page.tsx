@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { useParams, useRouter } from "next/navigation";
+import { useParams, useRouter, useSearchParams } from "next/navigation";
 import {
   Calendar,
   ChevronRight,
@@ -50,6 +50,7 @@ import {
 } from "@/components/ui/accordion";
 import { toast } from "sonner";
 import { PlanNavigationTabs } from "@/components/plan/PlanNavigationTabs";
+import { buildScenarioHref, parseScenario } from "@/lib/scenario";
 import { Separator } from "@/components/ui/separator";
 import type { MonthlyRecord, Plan, YearMonth } from "@/lib/domain/types";
 import { formatYearMonth, formatYen, getCurrentYearMonth } from "@/lib/format";
@@ -89,7 +90,12 @@ const formatDateShort = (value: string) => {
 export default function MonthlyListPage() {
   const params = useParams();
   const router = useRouter();
+  const searchParams = useSearchParams();
   const planId = params.planId as string;
+  const scenarioParam = searchParams.get("scenario");
+  const scenarioKey = parseScenario(scenarioParam);
+  const buildScenarioLink = (base: string) =>
+    buildScenarioHref(base, { scenario: scenarioKey, includeWhenMissing: true });
   const repos = useMemo(() => createRepositories(), []);
   const currentYm = getCurrentYearMonth();
   const currentYear = getYearFromYm(currentYm);
@@ -265,7 +271,7 @@ export default function MonthlyListPage() {
             </Link>
             <ChevronRight className="h-4 w-4" />
             <Link
-              href={`/plans/${planId}`}
+              href={buildScenarioLink(`/plans/${planId}`)}
               className="hover:text-foreground transition-colors"
             >
               {plan?.name ?? "プラン"}
@@ -284,13 +290,17 @@ export default function MonthlyListPage() {
             </div>
             <div className="flex flex-wrap items-center gap-2">
               <Button asChild>
-                <Link href={`/plans/${planId}/months/current`}>
+                <Link href={buildScenarioLink(`/plans/${planId}/months/current`)}>
                   <Calendar className="h-4 w-4 mr-2" />
                   今月を入力
                 </Link>
               </Button>
               <Button variant="outline" asChild>
-                <Link href={`/plans/${planId}/months/current/detail`}>
+                <Link
+                  href={buildScenarioLink(
+                    `/plans/${planId}/months/current/detail`,
+                  )}
+                >
                   <FileText className="h-4 w-4 mr-2" />
                   詳細入力へ
                 </Link>
@@ -337,7 +347,7 @@ export default function MonthlyListPage() {
                   まずは今月の合計（収入/支出/資産/負債）を入力しましょう
                 </p>
                 <Button asChild>
-                  <Link href={`/plans/${planId}/months/current`}>
+                  <Link href={buildScenarioLink(`/plans/${planId}/months/current`)}>
                     今月を入力
                   </Link>
                 </Button>
@@ -503,7 +513,9 @@ export default function MonthlyListPage() {
                               disabled={actionLoading === month.ym}
                             >
                               <Link
-                                href={`/plans/${planId}/months/${month.ym}`}
+                                href={buildScenarioLink(
+                                  `/plans/${planId}/months/${month.ym}`,
+                                )}
                               >
                                 編集
                               </Link>
@@ -515,7 +527,9 @@ export default function MonthlyListPage() {
                               disabled={actionLoading === month.ym}
                             >
                               <Link
-                                href={`/plans/${planId}/months/${month.ym}`}
+                                href={buildScenarioLink(
+                                  `/plans/${planId}/months/${month.ym}`,
+                                )}
                               >
                                 入力する
                               </Link>
@@ -530,7 +544,9 @@ export default function MonthlyListPage() {
                             disabled={actionLoading === month.ym}
                           >
                             <Link
-                              href={`/plans/${planId}/months/${month.ym}/detail`}
+                              href={buildScenarioLink(
+                                `/plans/${planId}/months/${month.ym}/detail`,
+                              )}
                             >
                               詳細
                             </Link>
@@ -550,7 +566,9 @@ export default function MonthlyListPage() {
                             <DropdownMenuContent align="end">
                               <DropdownMenuItem asChild className="md:hidden">
                                 <Link
-                                  href={`/plans/${planId}/months/${month.ym}/detail`}
+                                  href={buildScenarioLink(
+                                    `/plans/${planId}/months/${month.ym}/detail`,
+                                  )}
                                 >
                                   <FileText className="h-4 w-4 mr-2" />
                                   詳細

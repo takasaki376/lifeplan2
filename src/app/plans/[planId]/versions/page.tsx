@@ -453,7 +453,11 @@ export default function VersionsPage() {
                     className="w-full justify-start bg-transparent"
                     asChild
                   >
-                    <Link href={`/plans/${planId}/housing/assumptions`}>
+                    <Link
+                      href={buildScenarioLink(
+                        `/plans/${planId}/housing/assumptions`,
+                      )}
+                    >
                       <Home className="mr-2 h-4 w-4" />
                       住宅前提編集へ
                     </Link>
@@ -463,7 +467,7 @@ export default function VersionsPage() {
                     className="w-full justify-start bg-transparent"
                     asChild
                   >
-                    <Link href={`/plans/${planId}/housing`}>
+                    <Link href={buildScenarioLink(`/plans/${planId}/housing`)}>
                       <BarChart3 className="mr-2 h-4 w-4" />
                       住宅LCC比較へ
                     </Link>

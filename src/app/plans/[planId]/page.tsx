@@ -441,18 +441,18 @@ export default function PlanDashboardPage() {
                       正確でなくてOK。あとから修正できます。
                     </CardDescription>
                   </CardHeader>
-                  <CardFooter className="flex flex-wrap gap-2">
-                    <Button asChild>
-                      <Link href={`/plans/${planId}/months/current`}>
-                        今月を入力
-                      </Link>
-                    </Button>
-                    <Button asChild variant="outline">
-                      <Link href={`/plans/${planId}/months`}>
-                        月次一覧を見る
-                      </Link>
-                    </Button>
-                  </CardFooter>
+                <CardFooter className="flex flex-wrap gap-2">
+                  <Button asChild>
+                    <Link href={buildScenarioLink(`/plans/${planId}/months/current`)}>
+                      今月を入力
+                    </Link>
+                  </Button>
+                  <Button asChild variant="outline">
+                    <Link href={buildScenarioLink(`/plans/${planId}/months`)}>
+                      月次一覧を見る
+                    </Link>
+                  </Button>
+                </CardFooter>
                 </Card>
               )}
               {dashboardState === "NEEDS_HOUSING" && (
@@ -464,7 +464,11 @@ export default function PlanDashboardPage() {
                   </CardHeader>
                   <CardFooter className="flex flex-wrap gap-2">
                     <Button asChild>
-                      <Link href={`/plans/${planId}/housing/assumptions`}>
+                      <Link
+                        href={buildScenarioLink(
+                          `/plans/${planId}/housing/assumptions`,
+                        )}
+                      >
                         住宅前提を設定
                       </Link>
                     </Button>
@@ -591,12 +595,14 @@ export default function PlanDashboardPage() {
                 </CardContent>
                 <CardFooter className="flex gap-2">
                   <Button asChild className="flex-1 sm:flex-none">
-                    <Link href={`/plans/${planId}/months/current`}>
+                    <Link href={buildScenarioLink(`/plans/${planId}/months/current`)}>
                       {hasMonthlyRecord ? "今月を編集" : "今月を入力"}
                     </Link>
                   </Button>
                   <Button asChild variant="outline">
-                    <Link href={`/plans/${planId}/months`}>月次一覧へ</Link>
+                    <Link href={buildScenarioLink(`/plans/${planId}/months`)}>
+                      月次一覧へ
+                    </Link>
                   </Button>
                 </CardFooter>
               </Card>
@@ -653,7 +659,7 @@ export default function PlanDashboardPage() {
                     variant="outline"
                     className="w-full sm:w-auto bg-transparent"
                   >
-                    <Link href={`/plans/${planId}/months/current`}>
+                    <Link href={buildScenarioLink(`/plans/${planId}/months/current`)}>
                       <Settings className="mr-2 h-4 w-4" />
                       残高を更新
                     </Link>
@@ -877,14 +883,22 @@ export default function PlanDashboardPage() {
                       variant="default"
                       className="flex-1 sm:flex-none"
                     >
-                      <Link href={`/plans/${planId}/housing/assumptions`}>
+                      <Link
+                        href={buildScenarioLink(
+                          `/plans/${planId}/housing/assumptions`,
+                        )}
+                      >
                         前提を編集
                       </Link>
                     </Button>
                   )}
                   {housingCardState === "READY" && (
                     <Button asChild variant="outline">
-                      <Link href={`/plans/${planId}/housing/assumptions`}>
+                      <Link
+                        href={buildScenarioLink(
+                          `/plans/${planId}/housing/assumptions`,
+                        )}
+                      >
                         前提を編集
                       </Link>
                     </Button>
@@ -935,22 +949,28 @@ export default function PlanDashboardPage() {
                               {item.label}
                             </p>
                           </div>
-                          <div className="flex items-center gap-2">
-                            <Button
-                              asChild
-                              size="sm"
-                              variant={item.done ? "outline" : "default"}
+                        <div className="flex items-center gap-2">
+                          <Button
+                            asChild
+                            size="sm"
+                            variant={item.done ? "outline" : "default"}
+                          >
+                            <Link
+                              href={buildScenarioLink(item.href)}
                             >
-                              <Link href={item.href}>{item.cta}</Link>
-                            </Button>
+                              {item.cta}
+                            </Link>
+                          </Button>
 
-                            {item.secondaryCta && (
-                              <Button asChild size="sm" variant="ghost">
-                                <Link href={item.secondaryCta.href}>
-                                  {item.secondaryCta.label}
-                                </Link>
-                              </Button>
-                            )}
+                          {item.secondaryCta && (
+                            <Button asChild size="sm" variant="ghost">
+                              <Link
+                                href={buildScenarioLink(item.secondaryCta.href)}
+                              >
+                                {item.secondaryCta.label}
+                              </Link>
+                            </Button>
+                          )}
                           </div>
                         </div>
                       ))
@@ -1159,7 +1179,7 @@ export default function PlanDashboardPage() {
                     size="sm"
                     className="w-full bg-transparent"
                   >
-                    <Link href={`/plans/${planId}/versions`}>
+                    <Link href={buildScenarioLink(`/plans/${planId}/versions`)}>
                       <History className="mr-2 h-4 w-4" />
                       改定履歴
                     </Link>
