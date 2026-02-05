@@ -186,11 +186,10 @@ export default function HousingAssumptionsPage() {
 
   const planId = params.planId as string;
   const scenarioParam = searchParams.get("scenario");
+  const parsedScenario = scenarioParam ?? "base";
   const buildScenarioHref = (base: string, params?: Record<string, string>) => {
     const search = new URLSearchParams(params);
-    if (scenarioParam) {
-      search.set("scenario", scenarioParam);
-    }
+    search.set("scenario", parsedScenario);
     const query = search.toString();
     return query ? `${base}?${query}` : base;
   };
