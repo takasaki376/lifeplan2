@@ -92,6 +92,8 @@ const toNumber = (value: string) => {
   return Number.isFinite(parsed) ? parsed : undefined;
 };
 
+const toNumberOrZero = (value: string) => toNumber(value) ?? 0;
+
 const getLoanYears = (months: number | undefined) =>
   months && months > 0 ? Math.max(1, Math.round(months / 12)) : 35;
 
@@ -433,7 +435,7 @@ export default function HousingAssumptionsPage() {
           value={(currentAssumptions?.loanInterestRate ?? 0) * 100}
           onChange={(e) =>
             updateHousing(activeType, {
-              loanInterestRate: toNumber(e.target.value) / 100,
+              loanInterestRate: toNumberOrZero(e.target.value) / 100,
             })
           }
         />
@@ -445,7 +447,7 @@ export default function HousingAssumptionsPage() {
           value={getLoanYears(currentAssumptions?.loanTermMonths)}
           onChange={(e) =>
             updateHousing(activeType, {
-              loanTermMonths: toNumber(e.target.value) * 12,
+              loanTermMonths: toNumberOrZero(e.target.value) * 12,
             })
           }
         />
@@ -469,8 +471,11 @@ export default function HousingAssumptionsPage() {
             type="number"
             value={currentAssumptions ? getSimpleRepairAnnual(currentAssumptions) : 0}
             onChange={(e) => {
-              const amount = toNumber(e.target.value);
-              const existingSchedule = currentAssumptions?.repairsSchedule ?? [];
+              const amount = toNumberOrZero(e.target.value);
+              const repairTarget = currentAssumptions as
+                | Extract<HousingAssumptions, { housingType: "high_performance_home" }>
+                | Extract<HousingAssumptions, { housingType: "detached" }>;
+              const existingSchedule = repairTarget.repairsSchedule ?? [];
               const hasDetailedSchedule =
                 existingSchedule.length > 1 ||
                 (existingSchedule.length === 1 &&
@@ -559,7 +564,7 @@ export default function HousingAssumptionsPage() {
           value={(currentAssumptions?.loanInterestRate ?? 0) * 100}
           onChange={(e) =>
             updateHousing(activeType, {
-              loanInterestRate: toNumber(e.target.value) / 100,
+              loanInterestRate: toNumberOrZero(e.target.value) / 100,
             })
           }
         />
@@ -571,7 +576,7 @@ export default function HousingAssumptionsPage() {
           value={getLoanYears(currentAssumptions?.loanTermMonths)}
           onChange={(e) =>
             updateHousing(activeType, {
-              loanTermMonths: toNumber(e.target.value) * 12,
+              loanTermMonths: toNumberOrZero(e.target.value) * 12,
             })
           }
         />
@@ -691,7 +696,7 @@ export default function HousingAssumptionsPage() {
             value={increaseRate}
             onChange={(e) =>
               updateTypeSpecific(activeType, {
-                rentIncreaseRateAnnual: toNumber(e.target.value) / 100,
+                rentIncreaseRateAnnual: toNumberOrZero(e.target.value) / 100,
               })
             }
           />
