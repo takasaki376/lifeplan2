@@ -111,6 +111,7 @@ export default function HousingAssumptionsPage() {
   const searchParams = useSearchParams();
   const planId = params.planId as string;
   const scenario = parseScenario(searchParams.get("scenario"));
+  const requestedType = searchParams.get("type");
   const repos = useMemo(() => createRepositories(), []);
 
   const [planName, setPlanName] = useState("プラン");
@@ -190,7 +191,6 @@ export default function HousingAssumptionsPage() {
           );
         }
 
-        const requestedType = searchParams.get("type");
         if (isHousingType(requestedType)) {
           setActiveType(requestedType);
         } else {
@@ -215,7 +215,7 @@ export default function HousingAssumptionsPage() {
     };
 
     void load();
-  }, [planId, repos, searchParams]);
+  }, [planId, repos, requestedType]);
 
   const currentAssumptions = housingByType?.[activeType] ?? null;
 
