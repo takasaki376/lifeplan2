@@ -1,23 +1,17 @@
-﻿"use client";
+"use client";
 
-import { useState } from "react";
-import { useRouter, useParams, useSearchParams } from "next/navigation";
+import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
+import { useParams, useSearchParams } from "next/navigation";
 import {
+  AlertTriangle,
   ChevronRight,
   Home,
-  Building2,
   Building,
+  Building2,
   KeyRound,
-  SlidersHorizontal,
   Save,
   RotateCcw,
-  Info,
-  AlertTriangle,
-  Flame,
-  Receipt,
-  Wrench,
-  PiggyBank,
   Plus,
   Trash2,
 } from "lucide-react";
@@ -25,14 +19,17 @@ import { Button } from "@/components/ui/button";
 import {
   Card,
   CardContent,
-  CardDescription,
   CardFooter,
   CardHeader,
   CardTitle,
+  CardDescription,
 } from "@/components/ui/card";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Switch } from "@/components/ui/switch";
+import { Separator } from "@/components/ui/separator";
+import { Badge } from "@/components/ui/badge";
 import {
   Select,
   SelectContent,
@@ -40,409 +37,1007 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Separator } from "@/components/ui/separator";
-import { Switch } from "@/components/ui/switch";
-import {
-  Accordion,
-  AccordionContent,
-  AccordionItem,
-  AccordionTrigger,
-} from "@/components/ui/accordion";
-import { Badge } from "@/components/ui/badge";
-import type { ScenarioPreset } from "@/lib/domain/types";
+import { Alert, AlertDescription } from "@/components/ui/alert";
+import type {
+  HousingAssumptions,
+  HousingType,
+  Id,
+  RepaymentType,
+} from "@/lib/domain/types";
 import { HOUSING_TYPE_LABELS } from "@/lib/housing";
-import { buildScenarioHref } from "@/lib/scenario";
+import { buildScenarioHref, parseScenario } from "@/lib/scenario";
+import { getRepositories } from "@/lib/repo/factory";
 import { toast } from "sonner";
 
-// Toggle this to simulate first-time vs existing assumptions state
-const HAS_ASSUMPTIONS = true;
-
-type HousingType = "high_performance_home" | "detached" | "condo" | "rent";
 type EditMode = "simple" | "advanced";
 
-interface RepairItem {
-  id: string;
-  cycle: number;
-  amount: number;
-  memo: string;
-}
+type HousingByType = {
+  [K in HousingType]: Extract<HousingAssumptions, { housingType: K }>;
+};
 
-interface Assumptions {
-  initialCost: number;
-  loanAmount: number;
-  interestRate: number;
-  loanYears: number;
-  propertyTax: number;
-  repairCostYearly: number;
-  utilityBase: number;
-  utilityCoefficient: number;
-  managementFee?: number;
-  repairReserve?: number;
-  parkingFee?: number;
-  rent?: number;
-  rentIncrease?: number;
-  renewalFee?: number;
-  renewalCycle?: number;
-  movingCost?: number;
-  repairSchedule?: RepairItem[];
-  downPayment?: number;
-  fees?: number;
-  isSelected: boolean;
-}
-
-const HOUSING_TYPES = [
-  {
-    id: "high_performance_home" as HousingType,
-    label: HOUSING_TYPE_LABELS.high_performance_home,
-    icon: Home,
-  },
-  {
-    id: "detached" as HousingType,
-    label: HOUSING_TYPE_LABELS.detached,
-    icon: Home,
-  },
-  {
-    id: "condo" as HousingType,
-    label: HOUSING_TYPE_LABELS.condo,
-    icon: Building2,
-  },
-  {
-    id: "rent" as HousingType,
-    label: HOUSING_TYPE_LABELS.rent,
-    icon: Building,
-  },
+const HOUSING_TYPES: HousingType[] = [
+  "high_performance_home",
+  "detached",
+  "condo",
+  "rent",
 ];
 
-const DEFAULT_ASSUMPTIONS: Record<HousingType, Assumptions> = {
-  high_performance_home: {
-    initialCost: 5000000,
-    loanAmount: 35000000,
-    interestRate: 1.2,
-    loanYears: 35,
-    propertyTax: 150000,
-    repairCostYearly: 200000,
-    utilityBase: 18000,
-    utilityCoefficient: 0.85,
-    repairSchedule: [
-      { id: "1", cycle: 10, amount: 1500000, memo: "外壁塗装" },
-      { id: "2", cycle: 20, amount: 2000000, memo: "屋根・設備交換" },
-    ],
-    isSelected: true,
-  },
-  detached: {
-    initialCost: 4500000,
-    loanAmount: 35000000,
-    interestRate: 1.5,
-    loanYears: 35,
-    propertyTax: 140000,
-    repairCostYearly: 300000,
-    utilityBase: 20000,
-    utilityCoefficient: 1.0,
-    repairSchedule: [
-      { id: "1", cycle: 10, amount: 2000000, memo: "外壁・屋根" },
-      { id: "2", cycle: 20, amount: 2500000, memo: "設備交換" },
-    ],
-    isSelected: false,
-  },
-  condo: {
-    initialCost: 3000000,
-    loanAmount: 35000000,
-    interestRate: 1.3,
-    loanYears: 35,
-    propertyTax: 120000,
-    repairCostYearly: 0,
-    utilityBase: 16000,
-    utilityCoefficient: 0.95,
-    managementFee: 15000,
-    repairReserve: 12000,
-    parkingFee: 10000,
-    repairSchedule: [
-      { id: "1", cycle: 12, amount: 1000000, memo: "大規模修繕一時金" },
-    ],
-    isSelected: false,
-  },
-  rent: {
-    initialCost: 500000,
-    loanAmount: 0,
-    interestRate: 0,
-    loanYears: 0,
-    propertyTax: 0,
-    repairCostYearly: 0,
-    utilityBase: 18000,
-    utilityCoefficient: 1.0,
-    rent: 120000,
-    rentIncrease: 1.5,
-    renewalFee: 120000,
-    renewalCycle: 2,
-    movingCost: 300000,
-    isSelected: false,
-  },
+const HOUSING_TYPE_ICONS: Record<HousingType, typeof Home> = {
+  high_performance_home: Home,
+  detached: Building2,
+  condo: Building,
+  rent: KeyRound,
+};
+
+const HOUSING_VIEW_KEY = "housingAssumptionsView";
+
+/**
+ * Deep clone a HousingByType map.
+ *
+ * Uses structuredClone for proper deep cloning. This handles:
+ * - Date objects (if createdAt/updatedAt were Date instead of ISODate strings)
+ * - Nested objects and arrays
+ * - All primitive types
+ *
+ * Note: Currently HousingAssumptions uses ISODate (string) for timestamps,
+ * but this approach is future-proof if the structure changes.
+ *
+ * Fallback: Uses JSON serialization for environments without structuredClone.
+ */
+const cloneHousingMap = (input: HousingByType): HousingByType => {
+  // structuredClone is available in modern browsers and Node 17+
+  if (typeof structuredClone === "function") {
+    return structuredClone(input);
+  }
+
+  // Fallback for older environments (safe for current HousingAssumptions structure)
+  return JSON.parse(JSON.stringify(input)) as HousingByType;
+};
+
+const setHousingMapValue = <T extends HousingType>(
+  target: Partial<HousingByType>,
+  type: T,
+  value: HousingByType[T],
+) => {
+  target[type] = value;
+};
+
+const isHousingType = (
+  value: string | null | undefined,
+): value is HousingType =>
+  typeof value === "string" && HOUSING_TYPES.includes(value as HousingType);
+
+const toNumber = (value: string) => {
+  const trimmed = value.trim();
+  if (trimmed === "") return undefined;
+  const parsed = Number(trimmed);
+  return Number.isFinite(parsed) ? parsed : undefined;
+};
+
+const toNumberOrZero = (value: string) => toNumber(value) ?? 0;
+
+const getLoanYears = (months: number | undefined) =>
+  months && months > 0 ? Math.max(1, Math.round(months / 12)) : 35;
+
+const getSimpleRepairAnnual = (item: HousingAssumptions) => {
+  if (!("repairsSchedule" in item)) return 0;
+  const schedule = item.repairsSchedule ?? [];
+  if (schedule.length === 1 && schedule[0]?.cycleYears === 1) {
+    return schedule[0]?.amountYen ?? 0;
+  }
+  return 0;
+};
+
+const validateHousing = (items: HousingByType): string[] => {
+  const errors: string[] = [];
+  const isNegative = (value?: number) =>
+    typeof value === "number" && value < 0;
+  const isRateInvalid = (value?: number) =>
+    typeof value === "number" && (value < 0 || value > 1);
+  const isTermInvalid = (value?: number) =>
+    typeof value === "number" && value < 1;
+
+  for (const type of HOUSING_TYPES) {
+    const item = items[type];
+    const label = HOUSING_TYPE_LABELS[type] ?? type;
+
+    if (isNegative(item.initialCostYen)) {
+      errors.push(`${label}: 購入価格が負の値です。`);
+    }
+    if (isNegative(item.downPaymentYen)) {
+      errors.push(`${label}: 頭金が負の値です。`);
+    }
+    if (isNegative(item.closingCostYen)) {
+      errors.push(`${label}: 諸費用が負の値です。`);
+    }
+    if (isNegative(item.loanPrincipalYen)) {
+      errors.push(`${label}: ローン元本が負の値です。`);
+    }
+    if (isRateInvalid(item.loanInterestRate)) {
+      errors.push(`${label}: 金利は0〜100%の範囲で入力してください。`);
+    }
+    if (isTermInvalid(item.loanTermMonths)) {
+      errors.push(`${label}: ローン期間は1ヶ月以上で入力してください。`);
+    }
+    if (isNegative(item.propertyTaxAnnualYen)) {
+      errors.push(`${label}: 固定資産税が負の値です。`);
+    }
+    if (isNegative(item.utilitiesBaseMonthlyYen)) {
+      errors.push(`${label}: 光熱費が負の値です。`);
+    }
+    if (isNegative(item.utilitiesFactor)) {
+      errors.push(`${label}: 住宅性能係数が負の値です。`);
+    }
+
+    if (item.housingType === "condo") {
+      const spec = item.typeSpecific ?? {};
+      if (isNegative(spec.managementFeeMonthlyYen)) {
+        errors.push(`${label}: 管理費が負の値です。`);
+      }
+      if (isNegative(spec.repairReserveMonthlyYen)) {
+        errors.push(`${label}: 修繕積立が負の値です。`);
+      }
+      if (isNegative(spec.parkingFeeMonthlyYen)) {
+        errors.push(`${label}: 駐車場が負の値です。`);
+      }
+    }
+
+    if (item.housingType === "rent") {
+      const spec = item.typeSpecific ?? {};
+      if (isNegative(spec.rentMonthlyYen)) {
+        errors.push(`${label}: 家賃が負の値です。`);
+      }
+      if (isRateInvalid(spec.rentIncreaseRateAnnual)) {
+        errors.push(`${label}: 家賃上昇率は0〜100%の範囲で入力してください。`);
+      }
+      if (isNegative(spec.movingCostYen)) {
+        errors.push(`${label}: 引越費用が負の値です。`);
+      }
+      if (isNegative(spec.renewalFeeYen)) {
+        errors.push(`${label}: 更新料が負の値です。`);
+      }
+      if (isTermInvalid(spec.renewalCycleYears)) {
+        errors.push(`${label}: 更新周期は1年以上で入力してください。`);
+      }
+      if (isNegative(spec.depositYen)) {
+        errors.push(`${label}: 敷金が負の値です。`);
+      }
+      if (isNegative(spec.keyMoneyYen)) {
+        errors.push(`${label}: 礼金が負の値です。`);
+      }
+    }
+
+    if (
+      item.housingType === "high_performance_home" ||
+      item.housingType === "detached"
+    ) {
+      const schedule = item.repairsSchedule ?? [];
+      schedule.forEach((entry, idx) => {
+        if (entry.cycleYears < 1) {
+          errors.push(`${label}: 修繕スケジュール${idx + 1}の周期が不正です。`);
+        }
+        if (entry.amountYen < 0) {
+          errors.push(`${label}: 修繕スケジュール${idx + 1}の金額が負の値です。`);
+        }
+      });
+    }
+  }
+
+  return errors;
 };
 
 export default function HousingAssumptionsPage() {
-  const router = useRouter();
   const params = useParams();
   const searchParams = useSearchParams();
-  //   const { toast } = useToast();
-
   const planId = params.planId as string;
-  const scenarioParam = searchParams.get("scenario");
-  const parsedScenario = scenarioParam ?? "base";
-  const buildScenarioLink = (base: string, params?: Record<string, string>) =>
-    buildScenarioHref(base, {
-      scenario: parsedScenario,
-      params,
-      includeWhenMissing: true,
-    });
+  const scenario = parseScenario(searchParams.get("scenario"));
+  const requestedType = searchParams.get("type");
+  const repos = getRepositories();
+
+  const [planName, setPlanName] = useState("プラン");
+  const [isLoading, setIsLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [noCurrentVersion, setNoCurrentVersion] = useState(false);
+  const [currentVersionId, setCurrentVersionId] = useState<Id | null>(null);
+  const [housingByType, setHousingByType] = useState<HousingByType | null>(
+    null,
+  );
   const [activeType, setActiveType] = useState<HousingType>(
     "high_performance_home",
   );
   const [editMode, setEditMode] = useState<EditMode>("simple");
-  const [horizonYears, setHorizonYears] = useState(35);
   const [isDirty, setIsDirty] = useState(false);
-  const [assumptions, setAssumptions] =
-    useState<Record<HousingType, Assumptions>>(DEFAULT_ASSUMPTIONS);
-  const [selectedPreset, setSelectedPreset] = useState<ScenarioPreset>("base");
+  const initialSnapshotRef = useRef<HousingByType | null>(null);
 
-  const currentAssumptions = assumptions[activeType];
-
-  const formatYen = (amount: number) => {
-    return new Intl.NumberFormat("ja-JP", {
-      style: "currency",
-      currency: "JPY",
-      maximumFractionDigits: 0,
-    }).format(amount);
-  };
-
-  const calculateLCC = () => {
-    const a = currentAssumptions;
-    const years = horizonYears;
-
-    let totalLCC = a.initialCost;
-
-    if (activeType === "rent") {
-      const baseRent = (a.rent || 0) * 12;
-      const rentGrowth = 1 + (a.rentIncrease || 0) / 100;
-      for (let i = 0; i < years; i++) {
-        totalLCC += baseRent * Math.pow(rentGrowth, i);
-      }
-      totalLCC += ((a.renewalFee || 0) * years) / (a.renewalCycle || 2);
-      totalLCC += (a.movingCost || 0) * Math.floor(years / 10);
-      totalLCC += a.utilityBase * 12 * a.utilityCoefficient * years;
-    } else {
-      // Loan
-      const monthlyPayment =
-        a.loanAmount > 0
-          ? (a.loanAmount *
-              (a.interestRate / 100 / 12) *
-              Math.pow(1 + a.interestRate / 100 / 12, a.loanYears * 12)) /
-            (Math.pow(1 + a.interestRate / 100 / 12, a.loanYears * 12) - 1)
-          : 0;
-      totalLCC += monthlyPayment * Math.min(years, a.loanYears) * 12;
-
-      // Tax
-      totalLCC += a.propertyTax * years;
-
-      // Repair/Management
-      totalLCC += a.repairCostYearly * years;
-      if (a.managementFee) totalLCC += a.managementFee * 12 * years;
-      if (a.repairReserve) totalLCC += a.repairReserve * 12 * years;
-      if (a.parkingFee) totalLCC += a.parkingFee * 12 * years;
-
-      // Utility
-      totalLCC += a.utilityBase * 12 * a.utilityCoefficient * years;
-    }
-
-    return Math.round(totalLCC);
-  };
-
-  const calculateBreakdown = () => {
-    const a = currentAssumptions;
-    const years = horizonYears;
-
-    if (activeType === "rent") {
-      const baseRent = (a.rent || 0) * 12;
-      const rentGrowth = 1 + (a.rentIncrease || 0) / 100;
-      let rentTotal = 0;
-      for (let i = 0; i < years; i++) {
-        rentTotal += baseRent * Math.pow(rentGrowth, i);
-      }
-
-      return {
-        initial: a.initialCost,
-        loanRent:
-          rentTotal + ((a.renewalFee || 0) * years) / (a.renewalCycle || 2),
-        tax: 0,
-        repair: (a.movingCost || 0) * Math.floor(years / 10),
-        utility: a.utilityBase * 12 * a.utilityCoefficient * years,
-      };
-    }
-
-    const monthlyPayment =
-      a.loanAmount > 0
-        ? (a.loanAmount *
-            (a.interestRate / 100 / 12) *
-            Math.pow(1 + a.interestRate / 100 / 12, a.loanYears * 12)) /
-          (Math.pow(1 + a.interestRate / 100 / 12, a.loanYears * 12) - 1)
-        : 0;
-
-    let repairTotal = a.repairCostYearly * years;
-    if (a.managementFee) repairTotal += a.managementFee * 12 * years;
-    if (a.repairReserve) repairTotal += a.repairReserve * 12 * years;
-    if (a.parkingFee) repairTotal += a.parkingFee * 12 * years;
-
-    return {
-      initial: a.initialCost,
-      loanRent: monthlyPayment * Math.min(years, a.loanYears) * 12,
-      tax: a.propertyTax * years,
-      repair: repairTotal,
-      utility: a.utilityBase * 12 * a.utilityCoefficient * years,
-    };
-  };
-
-  const breakdown = calculateBreakdown();
-
-  const updateAssumption = (
-    key: keyof Assumptions,
-    value: Assumptions[keyof Assumptions],
-  ) => {
-    setAssumptions((prev) => ({
-      ...prev,
-      [activeType]: { ...prev[activeType], [key]: value },
-    }));
-    setIsDirty(true);
-  };
-
-  const applyPreset = (preset: ScenarioPreset) => {
-    const multiplier =
-      preset === "conservative" ? 1.15 : preset === "optimistic" ? 0.85 : 1.0;
-    const baseAssumptions = DEFAULT_ASSUMPTIONS[activeType];
-
-    setAssumptions((prev) => ({
-      ...prev,
-      [activeType]: {
-        ...baseAssumptions,
-        initialCost: Math.round(baseAssumptions.initialCost * multiplier),
-        loanAmount: baseAssumptions.loanAmount,
-        interestRate: baseAssumptions.interestRate * multiplier,
-        propertyTax: Math.round(baseAssumptions.propertyTax * multiplier),
-        repairCostYearly: Math.round(
-          baseAssumptions.repairCostYearly * multiplier,
-        ),
-        utilityBase: Math.round(baseAssumptions.utilityBase * multiplier),
-        managementFee: baseAssumptions.managementFee
-          ? Math.round(baseAssumptions.managementFee * multiplier)
-          : undefined,
-        repairReserve: baseAssumptions.repairReserve
-          ? Math.round(baseAssumptions.repairReserve * multiplier)
-          : undefined,
-        rent: baseAssumptions.rent
-          ? Math.round(baseAssumptions.rent * multiplier)
-          : undefined,
-        isSelected: prev[activeType].isSelected,
-      },
-    }));
-    setIsDirty(true);
-  };
-
-  const handleSave = () => {
-    // toast({
-    //   title: "保存しました",
-    //   description: "前提が更新されました",
-    // });
-    toast("保存しました", {
-      description: "前提が更新されました",
+  const buildScenarioLink = (base: string, params?: Record<string, string>) =>
+    buildScenarioHref(base, {
+      scenario,
+      params,
+      includeWhenMissing: true,
     });
-    setIsDirty(false);
+
+  useEffect(() => {
+    const stored =
+      typeof window !== "undefined"
+        ? window.localStorage.getItem(HOUSING_VIEW_KEY)
+        : null;
+    if (stored === "simple" || stored === "advanced") {
+      setEditMode(stored);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    window.localStorage.setItem(HOUSING_VIEW_KEY, editMode);
+  }, [editMode]);
+
+  useEffect(() => {
+    const load = async () => {
+      try {
+        setIsLoading(true);
+        setLoadError(null);
+        setNoCurrentVersion(false);
+
+        const plan = await repos.plan.get(planId);
+        if (plan?.name) {
+          setPlanName(plan.name);
+        }
+
+        const currentVersion = await repos.version.getCurrent(planId);
+        if (!currentVersion) {
+          setNoCurrentVersion(true);
+          setCurrentVersionId(null);
+          setHousingByType(null);
+          return;
+        }
+
+        setCurrentVersionId(currentVersion.id);
+        let list = await repos.housing.listByVersion(currentVersion.id);
+
+        const missingTypes = HOUSING_TYPES.filter(
+          (type) => !list.some((item) => item.housingType === type),
+        );
+        if (missingTypes.length > 0) {
+          for (const type of missingTypes) {
+            await repos.housing.applyPreset(currentVersion.id, type, "base");
+          }
+          list = await repos.housing.listByVersion(currentVersion.id);
+        }
+
+        const map: Partial<HousingByType> = {};
+        for (const item of list) {
+          setHousingMapValue(
+            map,
+            item.housingType,
+            item as HousingByType[typeof item.housingType],
+          );
+        }
+
+        if (isHousingType(requestedType)) {
+          setActiveType(requestedType);
+        } else {
+          const selected =
+            list.find((item) => item.isSelected)?.housingType ??
+            list[0]?.housingType ??
+            "high_performance_home";
+          setActiveType(selected);
+        }
+
+        setHousingByType(map as HousingByType);
+        initialSnapshotRef.current = cloneHousingMap(map as HousingByType);
+        setIsDirty(false);
+      } catch (error) {
+        console.error(error);
+        setLoadError("住宅前提の読み込みに失敗しました。");
+        setHousingByType(null);
+        setCurrentVersionId(null);
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    void load();
+  }, [planId, repos, requestedType]);
+
+  const currentAssumptions = housingByType?.[activeType] ?? null;
+
+  const updateHousing = <T extends HousingType>(
+    type: T,
+    patch: Partial<Extract<HousingAssumptions, { housingType: T }>>,
+  ) => {
+    setHousingByType((prev) => {
+      if (!prev) return prev;
+      const current = prev[type] as Extract<
+        HousingAssumptions,
+        { housingType: T }
+      >;
+      const next = { ...prev };
+      next[type] = { ...current, ...patch } as HousingByType[T];
+      return next;
+    });
+    setIsDirty(true);
+  };
+
+  const updateTypeSpecific = <T extends HousingType>(
+    type: T,
+    patch: Record<string, number | string | undefined>,
+  ) => {
+    setHousingByType((prev) => {
+      if (!prev) return prev;
+      const current = prev[type] as Extract<
+        HousingAssumptions,
+        { housingType: T }
+      >;
+      const typeSpecific = { ...(current.typeSpecific ?? {}) };
+      for (const [key, value] of Object.entries(patch)) {
+        if (value === undefined) {
+          delete (typeSpecific as Record<string, unknown>)[key];
+        } else {
+          (typeSpecific as Record<string, unknown>)[key] = value;
+        }
+      }
+      return {
+        ...prev,
+        [type]: {
+          ...current,
+          typeSpecific,
+        } as HousingByType[T],
+      };
+    });
+    setIsDirty(true);
+  };
+
+  const handleSelectType = (checked: boolean) => {
+    updateHousing(activeType, { isSelected: checked });
+  };
+
+  const handleSave = async () => {
+    if (!currentVersionId || !housingByType) return;
+    const validationErrors = validateHousing(housingByType);
+    if (validationErrors.length > 0) {
+      toast("入力エラーがあります", {
+        description: validationErrors[0],
+      });
+      return;
+    }
+    const succeededTypes: HousingType[] = [];
+    let failedType: HousingType | null = null;
+    try {
+      for (const type of HOUSING_TYPES) {
+        const item = housingByType[type];
+        try {
+          await repos.housing.upsert({
+            ...item,
+            planVersionId: currentVersionId,
+            housingType: type,
+          });
+          succeededTypes.push(type);
+        } catch (error) {
+          failedType = type;
+          throw error;
+        }
+      }
+      initialSnapshotRef.current = cloneHousingMap(housingByType);
+      setIsDirty(false);
+      toast("保存しました", { description: "前提が更新されました。" });
+    } catch (error) {
+      console.error(error);
+      let rollbackError: unknown = null;
+      if (initialSnapshotRef.current && succeededTypes.length > 0) {
+        try {
+          for (const type of succeededTypes) {
+            const snapshotItem = initialSnapshotRef.current[type];
+            if (!snapshotItem) continue;
+            await repos.housing.upsert({
+              ...snapshotItem,
+              planVersionId: currentVersionId,
+              housingType: type,
+            });
+          }
+        } catch (rbErr) {
+          console.error("Failed to rollback housing assumptions", rbErr);
+          rollbackError = rbErr;
+        }
+      }
+      const descriptionParts: string[] = [];
+      if (failedType) {
+        const label = HOUSING_TYPE_LABELS[failedType] ?? failedType;
+        descriptionParts.push(
+          `住宅タイプ「${label}」の保存中にエラーが発生しました。`,
+        );
+      }
+      if (rollbackError) {
+        descriptionParts.push("一部のデータは元の状態に戻せませんでした。");
+      } else if (succeededTypes.length > 0) {
+        descriptionParts.push("保存済みのデータは元の状態に戻しました。");
+      }
+      descriptionParts.push("もう一度お試しください。");
+      toast("保存に失敗しました", {
+        description: descriptionParts.join(" "),
+      });
+    }
   };
 
   const handleReset = () => {
-    setAssumptions(DEFAULT_ASSUMPTIONS);
+    if (!initialSnapshotRef.current) return;
+    setHousingByType(cloneHousingMap(initialSnapshotRef.current));
     setIsDirty(false);
-    // toast({
-    //   title: "元に戻しました",
-    //   description: "前回保存時の状態に戻しました",
-    // });
-    toast("元に戻しました", {
-      description: "前回保存時の状態に戻しました",
-    });
+    toast("元に戻しました", { description: "前回保存時の状態に戻しました。" });
   };
 
   const addRepairItem = () => {
-    const newItem: RepairItem = {
-      id: Date.now().toString(),
-      cycle: 10,
-      amount: 1000000,
-      memo: "",
-    };
-    setAssumptions((prev) => ({
-      ...prev,
-      [activeType]: {
-        ...prev[activeType],
-        repairSchedule: [...(prev[activeType].repairSchedule || []), newItem],
-      },
-    }));
-    setIsDirty(true);
-  };
-
-  const removeRepairItem = (id: string) => {
-    setAssumptions((prev) => ({
-      ...prev,
-      [activeType]: {
-        ...prev[activeType],
-        repairSchedule:
-          prev[activeType].repairSchedule?.filter((item) => item.id !== id) ||
-          [],
-      },
-    }));
-    setIsDirty(true);
+    if (!currentAssumptions || !("repairsSchedule" in currentAssumptions))
+      return;
+    const schedule = currentAssumptions.repairsSchedule ?? [];
+    updateHousing(activeType, {
+      repairsSchedule: [
+        ...schedule,
+        { cycleYears: 10, amountYen: 1000000, memo: "" },
+      ],
+    });
   };
 
   const updateRepairItem = (
-    id: string,
-    key: keyof RepairItem,
-    value: RepairItem[keyof RepairItem],
+    index: number,
+    patch: { cycleYears?: number; amountYen?: number; memo?: string },
   ) => {
-    setAssumptions((prev) => ({
-      ...prev,
-      [activeType]: {
-        ...prev[activeType],
-        repairSchedule:
-          prev[activeType].repairSchedule?.map((item) =>
-            item.id === id ? { ...item, [key]: value } : item,
-          ) || [],
-      },
-    }));
-    setIsDirty(true);
+    if (!currentAssumptions || !("repairsSchedule" in currentAssumptions))
+      return;
+    const schedule = currentAssumptions.repairsSchedule ?? [];
+    const next = schedule.map((item, idx) =>
+      idx === index ? { ...item, ...patch } : item,
+    );
+    updateHousing(activeType, { repairsSchedule: next });
   };
 
-  if (!HAS_ASSUMPTIONS) {
+  const removeRepairItem = (index: number) => {
+    if (!currentAssumptions || !("repairsSchedule" in currentAssumptions))
+      return;
+    const schedule = currentAssumptions.repairsSchedule ?? [];
+    updateHousing(activeType, {
+      repairsSchedule: schedule.filter((_, idx) => idx !== index),
+    });
+  };
+
+  const renderCommon = () => (
+    <div className="grid gap-4 sm:grid-cols-2">
+      <div className="space-y-1.5">
+        <Label>光熱費（基準/月）</Label>
+        <Input
+          type="number"
+          value={currentAssumptions?.utilitiesBaseMonthlyYen ?? 0}
+          onChange={(e) =>
+            updateHousing(activeType, {
+              utilitiesBaseMonthlyYen: toNumber(e.target.value),
+            })
+          }
+        />
+      </div>
+      <div className="space-y-1.5">
+        <Label>住宅性能係数</Label>
+        <Input
+          type="number"
+          step="0.01"
+          value={currentAssumptions?.utilitiesFactor ?? 1}
+          onChange={(e) =>
+            updateHousing(activeType, {
+              utilitiesFactor: toNumber(e.target.value),
+            })
+          }
+        />
+      </div>
+    </div>
+  );
+
+  const renderPurchaseSimple = () => (
+    <div className="grid gap-4 sm:grid-cols-2">
+      <div className="space-y-1.5">
+        <Label>購入価格</Label>
+        <Input
+          type="number"
+          value={currentAssumptions?.initialCostYen ?? 0}
+          onChange={(e) =>
+            updateHousing(activeType, {
+              initialCostYen: toNumber(e.target.value),
+            })
+          }
+        />
+      </div>
+      <div className="space-y-1.5">
+        <Label>頭金</Label>
+        <Input
+          type="number"
+          value={currentAssumptions?.downPaymentYen ?? 0}
+          onChange={(e) =>
+            updateHousing(activeType, {
+              downPaymentYen: toNumber(e.target.value),
+            })
+          }
+        />
+      </div>
+      <div className="space-y-1.5">
+        <Label>金利（年率%）</Label>
+        <Input
+          type="number"
+          step="0.01"
+          value={(currentAssumptions?.loanInterestRate ?? 0) * 100}
+          onChange={(e) =>
+            updateHousing(activeType, {
+              loanInterestRate: toNumberOrZero(e.target.value) / 100,
+            })
+          }
+        />
+      </div>
+      <div className="space-y-1.5">
+        <Label>ローン年数</Label>
+        <Input
+          type="number"
+          value={getLoanYears(currentAssumptions?.loanTermMonths)}
+          onChange={(e) =>
+            updateHousing(activeType, {
+              loanTermMonths: toNumberOrZero(e.target.value) * 12,
+            })
+          }
+        />
+      </div>
+      <div className="space-y-1.5">
+        <Label>固定資産税（年額）</Label>
+        <Input
+          type="number"
+          value={currentAssumptions?.propertyTaxAnnualYen ?? 0}
+          onChange={(e) =>
+            updateHousing(activeType, {
+              propertyTaxAnnualYen: toNumber(e.target.value),
+            })
+          }
+        />
+      </div>
+      {(activeType === "high_performance_home" ||
+        activeType === "detached") && (
+        <div className="space-y-1.5">
+          <Label>修繕（年額概算）</Label>
+          <Input
+            type="number"
+            value={
+              currentAssumptions ? getSimpleRepairAnnual(currentAssumptions) : 0
+            }
+            onChange={(e) => {
+              const amount = toNumberOrZero(e.target.value);
+              const repairTarget = currentAssumptions as
+                | Extract<
+                    HousingAssumptions,
+                    { housingType: "high_performance_home" }
+                  >
+                | Extract<HousingAssumptions, { housingType: "detached" }>;
+              const existingSchedule = repairTarget.repairsSchedule ?? [];
+              const hasDetailedSchedule =
+                existingSchedule.length > 1 ||
+                (existingSchedule.length === 1 &&
+                  existingSchedule[0]?.cycleYears !== 1);
+
+              if (hasDetailedSchedule) {
+                const proceed = window.confirm(
+                  "詳細な修繕スケジュールが設定されています。この入力を変更すると、既存の修繕スケジュールは「年額」の単純な設定に上書きされます。よろしいですか？",
+                );
+                if (!proceed) {
+                  return;
+                }
+              }
+
+              updateHousing(activeType, {
+                repairsSchedule: [
+                  {
+                    cycleYears: 1,
+                    amountYen: amount,
+                    memo: "",
+                  },
+                ],
+              });
+            }}
+          />
+        </div>
+      )}
+    </div>
+  );
+
+  const renderPurchaseAdvanced = () => (
+    <div className="grid gap-4 sm:grid-cols-2">
+      <div className="space-y-1.5">
+        <Label>初期費用（購入価格）</Label>
+        <Input
+          type="number"
+          value={currentAssumptions?.initialCostYen ?? 0}
+          onChange={(e) =>
+            updateHousing(activeType, {
+              initialCostYen: toNumber(e.target.value),
+            })
+          }
+        />
+      </div>
+      <div className="space-y-1.5">
+        <Label>頭金</Label>
+        <Input
+          type="number"
+          value={currentAssumptions?.downPaymentYen ?? 0}
+          onChange={(e) =>
+            updateHousing(activeType, {
+              downPaymentYen: toNumber(e.target.value),
+            })
+          }
+        />
+      </div>
+      <div className="space-y-1.5">
+        <Label>諸費用</Label>
+        <Input
+          type="number"
+          value={currentAssumptions?.closingCostYen ?? 0}
+          onChange={(e) =>
+            updateHousing(activeType, {
+              closingCostYen: toNumber(e.target.value),
+            })
+          }
+        />
+      </div>
+      <div className="space-y-1.5">
+        <Label>ローン元本</Label>
+        <Input
+          type="number"
+          value={currentAssumptions?.loanPrincipalYen ?? 0}
+          onChange={(e) =>
+            updateHousing(activeType, {
+              loanPrincipalYen: toNumber(e.target.value),
+            })
+          }
+        />
+      </div>
+      <div className="space-y-1.5">
+        <Label>金利（年率%）</Label>
+        <Input
+          type="number"
+          step="0.01"
+          value={(currentAssumptions?.loanInterestRate ?? 0) * 100}
+          onChange={(e) =>
+            updateHousing(activeType, {
+              loanInterestRate: toNumberOrZero(e.target.value) / 100,
+            })
+          }
+        />
+      </div>
+      <div className="space-y-1.5">
+        <Label>ローン年数</Label>
+        <Input
+          type="number"
+          value={getLoanYears(currentAssumptions?.loanTermMonths)}
+          onChange={(e) =>
+            updateHousing(activeType, {
+              loanTermMonths: toNumberOrZero(e.target.value) * 12,
+            })
+          }
+        />
+      </div>
+      <div className="space-y-1.5">
+        <Label>返済方式</Label>
+        <Select
+          value={
+            (currentAssumptions?.repaymentType ?? "annuity") as RepaymentType
+          }
+          onValueChange={(value) =>
+            updateHousing(activeType, {
+              repaymentType: value as RepaymentType,
+            })
+          }
+        >
+          <SelectTrigger>
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="annuity">元利均等</SelectItem>
+            <SelectItem value="equal_principal">元金均等</SelectItem>
+          </SelectContent>
+        </Select>
+      </div>
+      <div className="space-y-1.5">
+        <Label>固定資産税（年額）</Label>
+        <Input
+          type="number"
+          value={currentAssumptions?.propertyTaxAnnualYen ?? 0}
+          onChange={(e) =>
+            updateHousing(activeType, {
+              propertyTaxAnnualYen: toNumber(e.target.value),
+            })
+          }
+        />
+      </div>
+    </div>
+  );
+
+  const renderCondoFees = () => {
+    if (activeType !== "condo") return null;
+    const condo = currentAssumptions as Extract<
+      HousingAssumptions,
+      { housingType: "condo" }
+    >;
+    const typeSpecific = condo.typeSpecific ?? {};
+    return (
+      <div className="grid gap-4 sm:grid-cols-2">
+        <div className="space-y-1.5">
+          <Label>管理費（月）</Label>
+          <Input
+            type="number"
+            value={typeSpecific.managementFeeMonthlyYen ?? 0}
+            onChange={(e) =>
+              updateTypeSpecific(activeType, {
+                managementFeeMonthlyYen: toNumber(e.target.value),
+              })
+            }
+          />
+        </div>
+        <div className="space-y-1.5">
+          <Label>修繕積立（月）</Label>
+          <Input
+            type="number"
+            value={typeSpecific.repairReserveMonthlyYen ?? 0}
+            onChange={(e) =>
+              updateTypeSpecific(activeType, {
+                repairReserveMonthlyYen: toNumber(e.target.value),
+              })
+            }
+          />
+        </div>
+        {editMode === "advanced" && (
+          <div className="space-y-1.5">
+            <Label>駐車場（月）</Label>
+            <Input
+              type="number"
+              value={typeSpecific.parkingFeeMonthlyYen ?? 0}
+              onChange={(e) =>
+                updateTypeSpecific(activeType, {
+                  parkingFeeMonthlyYen: toNumber(e.target.value),
+                })
+              }
+            />
+          </div>
+        )}
+      </div>
+    );
+  };
+
+  const renderRent = () => {
+    if (activeType !== "rent") return null;
+    const rent = currentAssumptions as Extract<
+      HousingAssumptions,
+      { housingType: "rent" }
+    >;
+    const typeSpecific = rent.typeSpecific ?? {};
+    const increaseRate = (typeSpecific.rentIncreaseRateAnnual ?? 0) * 100;
+    return (
+      <div className="grid gap-4 sm:grid-cols-2">
+        <div className="space-y-1.5">
+          <Label>家賃（月）</Label>
+          <Input
+            type="number"
+            value={typeSpecific.rentMonthlyYen ?? 0}
+            onChange={(e) =>
+              updateTypeSpecific(activeType, {
+                rentMonthlyYen: toNumber(e.target.value),
+              })
+            }
+          />
+        </div>
+        <div className="space-y-1.5">
+          <Label>家賃上昇率（年率%）</Label>
+          <Input
+            type="number"
+            step="0.1"
+            value={increaseRate}
+            onChange={(e) =>
+              updateTypeSpecific(activeType, {
+                rentIncreaseRateAnnual: toNumberOrZero(e.target.value) / 100,
+              })
+            }
+          />
+        </div>
+        <div className="space-y-1.5">
+          <Label>引越費用</Label>
+          <Input
+            type="number"
+            value={typeSpecific.movingCostYen ?? 0}
+            onChange={(e) =>
+              updateTypeSpecific(activeType, {
+                movingCostYen: toNumber(e.target.value),
+              })
+            }
+          />
+        </div>
+        <div className="space-y-1.5">
+          <Label>更新料（1回）</Label>
+          <Input
+            type="number"
+            value={typeSpecific.renewalFeeYen ?? 0}
+            onChange={(e) =>
+              updateTypeSpecific(activeType, {
+                renewalFeeYen: toNumber(e.target.value),
+              })
+            }
+          />
+        </div>
+        <div className="space-y-1.5">
+          <Label>更新周期（年）</Label>
+          <Input
+            type="number"
+            value={typeSpecific.renewalCycleYears ?? 0}
+            onChange={(e) =>
+              updateTypeSpecific(activeType, {
+                renewalCycleYears: toNumber(e.target.value),
+              })
+            }
+          />
+        </div>
+        {editMode === "advanced" && (
+          <>
+            <div className="space-y-1.5">
+              <Label>敷金</Label>
+              <Input
+                type="number"
+                value={typeSpecific.depositYen ?? 0}
+                onChange={(e) =>
+                  updateTypeSpecific(activeType, {
+                    depositYen: toNumber(e.target.value),
+                  })
+                }
+              />
+            </div>
+            <div className="space-y-1.5">
+              <Label>礼金</Label>
+              <Input
+                type="number"
+                value={typeSpecific.keyMoneyYen ?? 0}
+                onChange={(e) =>
+                  updateTypeSpecific(activeType, {
+                    keyMoneyYen: toNumber(e.target.value),
+                  })
+                }
+              />
+            </div>
+          </>
+        )}
+      </div>
+    );
+  };
+
+  const renderRepairsSchedule = () => {
+    if (activeType !== "high_performance_home" && activeType !== "detached") {
+      return null;
+    }
+    const housing = currentAssumptions as
+      | Extract<HousingAssumptions, { housingType: "high_performance_home" }>
+      | Extract<HousingAssumptions, { housingType: "detached" }>;
+    const schedule = housing.repairsSchedule ?? [];
+    return (
+      <div className="space-y-2">
+        <div className="flex items-center justify-between">
+          <Label>修繕スケジュール</Label>
+          <Button variant="outline" size="sm" onClick={addRepairItem}>
+            <Plus className="mr-1 h-3 w-3" />
+            行を追加
+          </Button>
+        </div>
+        <div className="space-y-2">
+          {schedule.map((item, index) => (
+            <div key={index} className="grid grid-cols-12 gap-2 items-start">
+              <div className="col-span-3">
+                <Input
+                  type="number"
+                  placeholder="周期（年）"
+                  value={item.cycleYears}
+                  onChange={(e) =>
+                    updateRepairItem(index, {
+                      cycleYears: toNumber(e.target.value),
+                    })
+                  }
+                />
+              </div>
+              <div className="col-span-4">
+                <Input
+                  type="number"
+                  placeholder="金額"
+                  value={item.amountYen}
+                  onChange={(e) =>
+                    updateRepairItem(index, {
+                      amountYen: toNumber(e.target.value),
+                    })
+                  }
+                />
+              </div>
+              <div className="col-span-4">
+                <Input
+                  placeholder="メモ"
+                  value={item.memo ?? ""}
+                  onChange={(e) =>
+                    updateRepairItem(index, {
+                      memo: e.target.value,
+                    })
+                  }
+                />
+              </div>
+              <div className="col-span-1">
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  onClick={() => removeRepairItem(index)}
+                >
+                  <Trash2 className="h-4 w-4" />
+                </Button>
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+    );
+  };
+
+  if (isLoading) {
     return (
       <div className="min-h-screen bg-muted/30">
-        <div className="mx-auto max-w-4xl p-6">
-          <Card className="mt-12">
+        <div className="mx-auto max-w-5xl p-6">
+          <p className="text-muted-foreground">読み込み中です…</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (noCurrentVersion) {
+    return (
+      <div className="min-h-screen bg-muted/30">
+        <div className="mx-auto max-w-5xl p-6">
+          <Alert className="mb-6">
+            <AlertTriangle className="h-4 w-4" />
+            <AlertDescription className="ml-2">
+              現行バージョンがありません。改定履歴で現行版を設定してください。
+            </AlertDescription>
+          </Alert>
+          <Button asChild>
+            <Link href={`/plans/${planId}/versions`}>改定履歴へ</Link>
+          </Button>
+        </div>
+      </div>
+    );
+  }
+
+  if (loadError) {
+    return (
+      <div className="min-h-screen bg-muted/30">
+        <div className="mx-auto max-w-5xl p-6">
+          <Alert className="mb-6">
+            <AlertTriangle className="h-4 w-4" />
+            <AlertDescription className="ml-2">{loadError}</AlertDescription>
+          </Alert>
+          <Button asChild>
+            <Link href={buildScenarioLink(`/plans/${planId}/housing`)}>
+              比較へ戻る
+            </Link>
+          </Button>
+        </div>
+      </div>
+    );
+  }
+
+  if (!currentAssumptions || !housingByType) {
+    return (
+      <div className="min-h-screen bg-muted/30">
+        <div className="mx-auto max-w-5xl p-6">
+          <Card>
             <CardHeader>
-              <CardTitle className="text-2xl">前提を設定しましょう</CardTitle>
+              <CardTitle className="text-xl">前提がありません</CardTitle>
               <CardDescription>
-                まずは「かんたん」でざっくり設定しましょう。わからない項目はあとで変更できます。
+                もう一度読み込み直してください。
               </CardDescription>
             </CardHeader>
-            <CardContent className="flex gap-3">
-              <Button
-                onClick={() => {
-                  setAssumptions(DEFAULT_ASSUMPTIONS);
-                  toast("標準プリセットを適用しました", {});
-                }}
-              >
-                標準プリセットを適用
-              </Button>
-              <Button
-                variant="outline"
-                onClick={() =>
-                  router.push(buildScenarioLink(`/plans/${planId}/housing`))
-                }
-              >
-                あとで設定する（比較へ）
+            <CardContent>
+              <Button asChild>
+                <Link href={buildScenarioLink(`/plans/${planId}/housing`)}>
+                  比較へ戻る
+                </Link>
               </Button>
             </CardContent>
           </Card>
@@ -451,27 +1046,24 @@ export default function HousingAssumptionsPage() {
     );
   }
 
+  const Icon = HOUSING_TYPE_ICONS[activeType];
+
   return (
     <div className="min-h-screen bg-muted/30">
-      {/* Header */}
       <div className="border-b bg-background">
-        <div className="mx-auto max-w-7xl px-6 py-4">
-          {/* Breadcrumb */}
+        <div className="mx-auto max-w-6xl px-6 py-4">
           <div className="mb-3 flex items-center gap-2 text-sm text-muted-foreground">
-            <Link href="/" className="hover:text-foreground transition-colors">
+            <Link href="/plans" className="hover:text-foreground">
               プラン一覧
             </Link>
             <ChevronRight className="h-4 w-4" />
-            <Link
-              href={`/plans/${planId}`}
-              className="hover:text-foreground transition-colors"
-            >
-              我が家のライフプラン
+            <Link href={`/plans/${planId}`} className="hover:text-foreground">
+              {planName}
             </Link>
             <ChevronRight className="h-4 w-4" />
             <Link
               href={buildScenarioLink(`/plans/${planId}/housing`)}
-              className="hover:text-foreground transition-colors"
+              className="hover:text-foreground"
             >
               住宅LCC
             </Link>
@@ -479,30 +1071,23 @@ export default function HousingAssumptionsPage() {
             <span className="text-foreground">前提</span>
           </div>
 
-          {/* Title & Actions */}
-          <div className="flex items-start justify-between gap-4">
+          <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
             <div>
-              <h1 className="text-2xl font-bold tracking-tight">
-                住宅LCC 前提の編集
-              </h1>
+              <h1 className="text-2xl font-bold">住宅前提の編集</h1>
               <p className="mt-1 text-sm text-muted-foreground">
-                数値は概算でOK。前提を変えると結果も変わります。
+                かんたん / 詳細を切り替えながら、4タイプの前提を調整します。
               </p>
             </div>
-
-            <div className="flex items-center gap-3">
+            <div className="flex flex-wrap items-center gap-3">
               {isDirty && <Badge variant="outline">変更があります</Badge>}
               <Button variant="outline" size="sm" onClick={handleReset}>
                 <RotateCcw className="mr-2 h-4 w-4" />
                 元に戻す
               </Button>
-              <Button
-                variant="outline"
-                onClick={() =>
-                  router.push(buildScenarioLink(`/plans/${planId}/housing`))
-                }
-              >
-                比較へ戻る
+              <Button variant="outline" asChild>
+                <Link href={buildScenarioLink(`/plans/${planId}/housing`)}>
+                  比較へ戻る
+                </Link>
               </Button>
               <Button onClick={handleSave}>
                 <Save className="mr-2 h-4 w-4" />
@@ -513,32 +1098,29 @@ export default function HousingAssumptionsPage() {
         </div>
       </div>
 
-      {/* Main Content */}
-      <div className="mx-auto max-w-7xl p-6">
-        <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
-          {/* Left: Editor */}
-          <div className="lg:col-span-8">
+      <div className="mx-auto max-w-6xl p-6">
+        <div className="grid gap-6 lg:grid-cols-12">
+          <div className="lg:col-span-8 space-y-6">
             <Card>
-              <CardHeader>
+              <CardHeader className="space-y-4">
                 <Tabs
                   value={activeType}
                   onValueChange={(v) => setActiveType(v as HousingType)}
                 >
                   <TabsList className="grid w-full grid-cols-4">
-                    {HOUSING_TYPES.map((type) => (
-                      <TabsTrigger
-                        key={type.id}
-                        value={type.id}
-                        className="gap-2"
-                      >
-                        <type.icon className="h-4 w-4" />
-                        {type.label}
-                      </TabsTrigger>
-                    ))}
+                    {HOUSING_TYPES.map((type) => {
+                      const ItemIcon = HOUSING_TYPE_ICONS[type];
+                      return (
+                        <TabsTrigger key={type} value={type} className="gap-2">
+                          <ItemIcon className="h-4 w-4" />
+                          {HOUSING_TYPE_LABELS[type]}
+                        </TabsTrigger>
+                      );
+                    })}
                   </TabsList>
                 </Tabs>
 
-                <div className="mt-4 flex items-center justify-between">
+                <div className="flex flex-wrap items-center justify-between gap-3">
                   <Tabs
                     value={editMode}
                     onValueChange={(v) => setEditMode(v as EditMode)}
@@ -551,10 +1133,8 @@ export default function HousingAssumptionsPage() {
 
                   <div className="flex items-center gap-2">
                     <Switch
-                      checked={currentAssumptions.isSelected}
-                      onCheckedChange={(checked) =>
-                        updateAssumption("isSelected", checked)
-                      }
+                      checked={currentAssumptions?.isSelected ?? false}
+                      onCheckedChange={handleSelectType}
                     />
                     <Label className="text-sm">
                       この住宅タイプを選択中にする
@@ -564,1327 +1144,87 @@ export default function HousingAssumptionsPage() {
               </CardHeader>
 
               <CardContent className="space-y-6">
-                {editMode === "simple" ? (
-                  <>
-                    {/* Simple Mode */}
-                    <div className="flex items-center justify-between rounded-lg border bg-muted/50 p-3">
-                      <div className="flex items-center gap-2">
-                        <SlidersHorizontal className="h-4 w-4 text-muted-foreground" />
-                        <span className="text-sm font-medium">
-                          おすすめプリセット
-                        </span>
-                      </div>
-                      <Select
-                        value={selectedPreset}
-                        onValueChange={(v) => {
-                          setSelectedPreset(v as ScenarioPreset);
-                          applyPreset(v as ScenarioPreset);
-                        }}
-                      >
-                        <SelectTrigger className="w-48">
-                          <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="base">標準（おすすめ）</SelectItem>
-                          <SelectItem value="conservative">
-                            保守（高めに見積もる）
-                          </SelectItem>
-                          <SelectItem value="optimistic">
-                            楽観（低めに見積もる）
-                          </SelectItem>
-                        </SelectContent>
-                      </Select>
-                    </div>
+                <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                  <Icon className="h-4 w-4" />
+                  <span>{HOUSING_TYPE_LABELS[activeType]} の前提</span>
+                </div>
 
-                    {/* Common Simple Fields */}
-                    <div className="space-y-4">
-                      <div className="flex items-center gap-2">
-                        <PiggyBank className="h-4 w-4 text-muted-foreground" />
-                        <h3 className="font-semibold">初期費用</h3>
-                      </div>
-                      <div className="grid gap-3">
-                        <div className="space-y-1.5">
-                          <Label htmlFor="initialCost">初期費用（合計）</Label>
-                          <div className="relative">
-                            <Input
-                              id="initialCost"
-                              type="number"
-                              value={currentAssumptions.initialCost}
-                              onChange={(e) =>
-                                updateAssumption(
-                                  "initialCost",
-                                  Number(e.target.value),
-                                )
-                              }
-                              className="pr-12"
-                            />
-                            <span className="absolute right-3 top-1/2 -translate-y-1/2 text-sm text-muted-foreground">
-                              円
-                            </span>
-                          </div>
-                        </div>
-                      </div>
-                    </div>
+                {editMode === "simple" && (
+                  <div className="space-y-6">
+                    {(activeType === "high_performance_home" ||
+                      activeType === "detached" ||
+                      activeType === "condo") &&
+                      renderPurchaseSimple()}
+
+                    {activeType === "condo" && renderCondoFees()}
+
+                    {activeType === "rent" && renderRent()}
 
                     <Separator />
+                    {renderCommon()}
+                  </div>
+                )}
 
-                    {/* Type-Specific Simple Fields */}
-                    {activeType === "rent" ? (
-                      <>
-                        <div className="space-y-4">
-                          <div className="flex items-center gap-2">
-                            <KeyRound className="h-4 w-4 text-muted-foreground" />
-                            <h3 className="font-semibold">家賃</h3>
-                          </div>
-                          <div className="grid gap-3 sm:grid-cols-2">
-                            <div className="space-y-1.5">
-                              <Label htmlFor="rent">家賃（月）</Label>
-                              <div className="relative">
-                                <Input
-                                  id="rent"
-                                  type="number"
-                                  value={currentAssumptions.rent || 0}
-                                  onChange={(e) =>
-                                    updateAssumption(
-                                      "rent",
-                                      Number(e.target.value),
-                                    )
-                                  }
-                                  className="pr-12"
-                                />
-                                <span className="absolute right-3 top-1/2 -translate-y-1/2 text-sm text-muted-foreground">
-                                  円
-                                </span>
-                              </div>
-                            </div>
-                            <div className="space-y-1.5">
-                              <Label htmlFor="rentIncrease">
-                                家賃上昇率（年）
-                              </Label>
-                              <div className="relative">
-                                <Input
-                                  id="rentIncrease"
-                                  type="number"
-                                  step="0.1"
-                                  value={currentAssumptions.rentIncrease || 0}
-                                  onChange={(e) =>
-                                    updateAssumption(
-                                      "rentIncrease",
-                                      Number(e.target.value),
-                                    )
-                                  }
-                                  className="pr-12"
-                                />
-                                <span className="absolute right-3 top-1/2 -translate-y-1/2 text-sm text-muted-foreground">
-                                  %
-                                </span>
-                              </div>
-                            </div>
-                            <div className="space-y-1.5">
-                              <Label htmlFor="renewalFee">更新料</Label>
-                              <div className="relative">
-                                <Input
-                                  id="renewalFee"
-                                  type="number"
-                                  value={currentAssumptions.renewalFee || 0}
-                                  onChange={(e) =>
-                                    updateAssumption(
-                                      "renewalFee",
-                                      Number(e.target.value),
-                                    )
-                                  }
-                                  className="pr-12"
-                                />
-                                <span className="absolute right-3 top-1/2 -translate-y-1/2 text-sm text-muted-foreground">
-                                  円
-                                </span>
-                              </div>
-                            </div>
-                            <div className="space-y-1.5">
-                              <Label htmlFor="renewalCycle">更新周期</Label>
-                              <div className="relative">
-                                <Input
-                                  id="renewalCycle"
-                                  type="number"
-                                  value={currentAssumptions.renewalCycle || 0}
-                                  onChange={(e) =>
-                                    updateAssumption(
-                                      "renewalCycle",
-                                      Number(e.target.value),
-                                    )
-                                  }
-                                  className="pr-12"
-                                />
-                                <span className="absolute right-3 top-1/2 -translate-y-1/2 text-sm text-muted-foreground">
-                                  年
-                                </span>
-                              </div>
-                            </div>
-                            <div className="space-y-1.5">
-                              <Label htmlFor="movingCost">引越費用</Label>
-                              <div className="relative">
-                                <Input
-                                  id="movingCost"
-                                  type="number"
-                                  value={currentAssumptions.movingCost || 0}
-                                  onChange={(e) =>
-                                    updateAssumption(
-                                      "movingCost",
-                                      Number(e.target.value),
-                                    )
-                                  }
-                                  className="pr-12"
-                                />
-                                <span className="absolute right-3 top-1/2 -translate-y-1/2 text-sm text-muted-foreground">
-                                  円
-                                </span>
-                              </div>
-                            </div>
-                          </div>
-                        </div>
-                      </>
-                    ) : activeType === "condo" ? (
-                      <>
-                        <div className="space-y-4">
-                          <div className="flex items-center gap-2">
-                            <KeyRound className="h-4 w-4 text-muted-foreground" />
-                            <h3 className="font-semibold">住宅ローン</h3>
-                          </div>
-                          <div className="grid gap-3 sm:grid-cols-2">
-                            <div className="space-y-1.5">
-                              <Label htmlFor="loanAmount">借入額</Label>
-                              <div className="relative">
-                                <Input
-                                  id="loanAmount"
-                                  type="number"
-                                  value={currentAssumptions.loanAmount}
-                                  onChange={(e) =>
-                                    updateAssumption(
-                                      "loanAmount",
-                                      Number(e.target.value),
-                                    )
-                                  }
-                                  className="pr-12"
-                                />
-                                <span className="absolute right-3 top-1/2 -translate-y-1/2 text-sm text-muted-foreground">
-                                  円
-                                </span>
-                              </div>
-                            </div>
-                            <div className="space-y-1.5">
-                              <Label htmlFor="interestRate">金利</Label>
-                              <div className="relative">
-                                <Input
-                                  id="interestRate"
-                                  type="number"
-                                  step="0.1"
-                                  value={currentAssumptions.interestRate}
-                                  onChange={(e) =>
-                                    updateAssumption(
-                                      "interestRate",
-                                      Number(e.target.value),
-                                    )
-                                  }
-                                  className="pr-12"
-                                />
-                                <span className="absolute right-3 top-1/2 -translate-y-1/2 text-sm text-muted-foreground">
-                                  %
-                                </span>
-                              </div>
-                            </div>
-                            <div className="space-y-1.5">
-                              <Label htmlFor="loanYears">返済期間</Label>
-                              <div className="relative">
-                                <Input
-                                  id="loanYears"
-                                  type="number"
-                                  value={currentAssumptions.loanYears}
-                                  onChange={(e) =>
-                                    updateAssumption(
-                                      "loanYears",
-                                      Number(e.target.value),
-                                    )
-                                  }
-                                  className="pr-12"
-                                />
-                                <span className="absolute right-3 top-1/2 -translate-y-1/2 text-sm text-muted-foreground">
-                                  年
-                                </span>
-                              </div>
-                            </div>
-                          </div>
-                        </div>
+                {editMode === "advanced" && (
+                  <div className="space-y-6">
+                    {(activeType === "high_performance_home" ||
+                      activeType === "detached" ||
+                      activeType === "condo") &&
+                      renderPurchaseAdvanced()}
 
-                        <Separator />
+                    {activeType === "condo" && renderCondoFees()}
 
-                        <div className="space-y-4">
-                          <div className="flex items-center gap-2">
-                            <Wrench className="h-4 w-4 text-muted-foreground" />
-                            <h3 className="font-semibold">管理・修繕</h3>
-                          </div>
-                          <div className="grid gap-3 sm:grid-cols-2">
-                            <div className="space-y-1.5">
-                              <Label htmlFor="managementFee">
-                                管理費（月）
-                              </Label>
-                              <div className="relative">
-                                <Input
-                                  id="managementFee"
-                                  type="number"
-                                  value={currentAssumptions.managementFee || 0}
-                                  onChange={(e) =>
-                                    updateAssumption(
-                                      "managementFee",
-                                      Number(e.target.value),
-                                    )
-                                  }
-                                  className="pr-12"
-                                />
-                                <span className="absolute right-3 top-1/2 -translate-y-1/2 text-sm text-muted-foreground">
-                                  円
-                                </span>
-                              </div>
-                            </div>
-                            <div className="space-y-1.5">
-                              <Label htmlFor="repairReserve">
-                                修繕積立金（月）
-                              </Label>
-                              <div className="relative">
-                                <Input
-                                  id="repairReserve"
-                                  type="number"
-                                  value={currentAssumptions.repairReserve || 0}
-                                  onChange={(e) =>
-                                    updateAssumption(
-                                      "repairReserve",
-                                      Number(e.target.value),
-                                    )
-                                  }
-                                  className="pr-12"
-                                />
-                                <span className="absolute right-3 top-1/2 -translate-y-1/2 text-sm text-muted-foreground">
-                                  円
-                                </span>
-                              </div>
-                            </div>
-                            <div className="space-y-1.5">
-                              <Label htmlFor="parkingFee">駐車場（月）</Label>
-                              <div className="relative">
-                                <Input
-                                  id="parkingFee"
-                                  type="number"
-                                  value={currentAssumptions.parkingFee || 0}
-                                  onChange={(e) =>
-                                    updateAssumption(
-                                      "parkingFee",
-                                      Number(e.target.value),
-                                    )
-                                  }
-                                  className="pr-12"
-                                />
-                                <span className="absolute right-3 top-1/2 -translate-y-1/2 text-sm text-muted-foreground">
-                                  円
-                                </span>
-                              </div>
-                            </div>
-                          </div>
-                        </div>
-                      </>
-                    ) : (
-                      <>
-                        {/* 高性能住宅 / 一般戸建 */}
-                        <div className="space-y-4">
-                          <div className="flex items-center gap-2">
-                            <KeyRound className="h-4 w-4 text-muted-foreground" />
-                            <h3 className="font-semibold">住宅ローン</h3>
-                          </div>
-                          <div className="grid gap-3 sm:grid-cols-2">
-                            <div className="space-y-1.5">
-                              <Label htmlFor="loanAmount">借入額</Label>
-                              <div className="relative">
-                                <Input
-                                  id="loanAmount"
-                                  type="number"
-                                  value={currentAssumptions.loanAmount}
-                                  onChange={(e) =>
-                                    updateAssumption(
-                                      "loanAmount",
-                                      Number(e.target.value),
-                                    )
-                                  }
-                                  className="pr-12"
-                                />
-                                <span className="absolute right-3 top-1/2 -translate-y-1/2 text-sm text-muted-foreground">
-                                  円
-                                </span>
-                              </div>
-                            </div>
-                            <div className="space-y-1.5">
-                              <Label htmlFor="interestRate">金利</Label>
-                              <div className="relative">
-                                <Input
-                                  id="interestRate"
-                                  type="number"
-                                  step="0.1"
-                                  value={currentAssumptions.interestRate}
-                                  onChange={(e) =>
-                                    updateAssumption(
-                                      "interestRate",
-                                      Number(e.target.value),
-                                    )
-                                  }
-                                  className="pr-12"
-                                />
-                                <span className="absolute right-3 top-1/2 -translate-y-1/2 text-sm text-muted-foreground">
-                                  %
-                                </span>
-                              </div>
-                            </div>
-                            <div className="space-y-1.5">
-                              <Label htmlFor="loanYears">返済期間</Label>
-                              <div className="relative">
-                                <Input
-                                  id="loanYears"
-                                  type="number"
-                                  value={currentAssumptions.loanYears}
-                                  onChange={(e) =>
-                                    updateAssumption(
-                                      "loanYears",
-                                      Number(e.target.value),
-                                    )
-                                  }
-                                  className="pr-12"
-                                />
-                                <span className="absolute right-3 top-1/2 -translate-y-1/2 text-sm text-muted-foreground">
-                                  年
-                                </span>
-                              </div>
-                            </div>
-                          </div>
-                        </div>
+                    {activeType === "rent" && renderRent()}
 
-                        <Separator />
-
-                        <div className="space-y-4">
-                          <div className="flex items-center gap-2">
-                            <Wrench className="h-4 w-4 text-muted-foreground" />
-                            <h3 className="font-semibold">修繕</h3>
-                          </div>
-                          <div className="grid gap-3">
-                            <div className="space-y-1.5">
-                              <Label htmlFor="repairCostYearly">
-                                修繕（年平均）
-                              </Label>
-                              <div className="relative">
-                                <Input
-                                  id="repairCostYearly"
-                                  type="number"
-                                  value={currentAssumptions.repairCostYearly}
-                                  onChange={(e) =>
-                                    updateAssumption(
-                                      "repairCostYearly",
-                                      Number(e.target.value),
-                                    )
-                                  }
-                                  className="pr-12"
-                                />
-                                <span className="absolute right-3 top-1/2 -translate-y-1/2 text-sm text-muted-foreground">
-                                  円
-                                </span>
-                              </div>
-                            </div>
-                          </div>
-                        </div>
-                      </>
-                    )}
-
-                    {activeType !== "rent" && (
+                    {(activeType === "high_performance_home" ||
+                      activeType === "detached") && (
                       <>
                         <Separator />
-
-                        <div className="space-y-4">
-                          <div className="flex items-center gap-2">
-                            <Receipt className="h-4 w-4 text-muted-foreground" />
-                            <h3 className="font-semibold">税（概算）</h3>
-                          </div>
-                          <div className="grid gap-3">
-                            <div className="space-y-1.5">
-                              <Label htmlFor="propertyTax">
-                                固定資産税（年）
-                              </Label>
-                              <div className="relative">
-                                <Input
-                                  id="propertyTax"
-                                  type="number"
-                                  value={currentAssumptions.propertyTax}
-                                  onChange={(e) =>
-                                    updateAssumption(
-                                      "propertyTax",
-                                      Number(e.target.value),
-                                    )
-                                  }
-                                  className="pr-12"
-                                />
-                                <span className="absolute right-3 top-1/2 -translate-y-1/2 text-sm text-muted-foreground">
-                                  円
-                                </span>
-                              </div>
-                            </div>
-                          </div>
-                        </div>
+                        {renderRepairsSchedule()}
                       </>
                     )}
 
                     <Separator />
-
-                    {/* Utility (Common) */}
-                    <div className="space-y-4">
-                      <div className="flex items-center gap-2">
-                        <Flame className="h-4 w-4 text-muted-foreground" />
-                        <h3 className="font-semibold">光熱費</h3>
-                      </div>
-                      <div className="grid gap-3 sm:grid-cols-2">
-                        <div className="space-y-1.5">
-                          <Label htmlFor="utilityBase">光熱費（基準/月）</Label>
-                          <div className="relative">
-                            <Input
-                              id="utilityBase"
-                              type="number"
-                              value={currentAssumptions.utilityBase}
-                              onChange={(e) =>
-                                updateAssumption(
-                                  "utilityBase",
-                                  Number(e.target.value),
-                                )
-                              }
-                              className="pr-12"
-                            />
-                            <span className="absolute right-3 top-1/2 -translate-y-1/2 text-sm text-muted-foreground">
-                              円
-                            </span>
-                          </div>
-                        </div>
-                        <div className="space-y-1.5">
-                          <Label htmlFor="utilityCoefficient">光熱費係数</Label>
-                          <div className="relative">
-                            <Input
-                              id="utilityCoefficient"
-                              type="number"
-                              step="0.01"
-                              value={currentAssumptions.utilityCoefficient}
-                              onChange={(e) =>
-                                updateAssumption(
-                                  "utilityCoefficient",
-                                  Number(e.target.value),
-                                )
-                              }
-                            />
-                          </div>
-                          <p className="text-xs text-muted-foreground">
-                            例: 0.85（高性能） / 1.0（標準）
-                          </p>
-                        </div>
-                      </div>
-                    </div>
-                  </>
-                ) : (
-                  <>
-                    {/* Advanced Mode */}
-                    <div className="rounded-lg border bg-blue-50 p-3 dark:bg-blue-950/20">
-                      <div className="flex gap-2">
-                        <Info className="h-4 w-4 shrink-0 text-blue-600 dark:text-blue-400 mt-0.5" />
-                        <p className="text-sm text-blue-900 dark:text-blue-100">
-                          詳細はわからなければ触らなくてOK。かんたんモードで十分です。
-                        </p>
-                      </div>
-                    </div>
-
-                    <Accordion type="multiple" className="space-y-2">
-                      {/* Initial Cost Details */}
-                      <AccordionItem
-                        value="initial"
-                        className="border rounded-lg px-4"
-                      >
-                        <AccordionTrigger className="hover:no-underline">
-                          <div className="flex items-center gap-2">
-                            <PiggyBank className="h-4 w-4 text-muted-foreground" />
-                            <span className="font-semibold">
-                              初期費用（内訳）
-                            </span>
-                          </div>
-                        </AccordionTrigger>
-                        <AccordionContent className="pt-4 space-y-3">
-                          <div className="space-y-1.5">
-                            <Label htmlFor="downPayment">頭金</Label>
-                            <div className="relative">
-                              <Input
-                                id="downPayment"
-                                type="number"
-                                value={currentAssumptions.downPayment || 0}
-                                onChange={(e) =>
-                                  updateAssumption(
-                                    "downPayment",
-                                    Number(e.target.value),
-                                  )
-                                }
-                                className="pr-12"
-                              />
-                              <span className="absolute right-3 top-1/2 -translate-y-1/2 text-sm text-muted-foreground">
-                                円
-                              </span>
-                            </div>
-                          </div>
-                          <div className="space-y-1.5">
-                            <Label htmlFor="fees">諸費用</Label>
-                            <div className="relative">
-                              <Input
-                                id="fees"
-                                type="number"
-                                value={currentAssumptions.fees || 0}
-                                onChange={(e) =>
-                                  updateAssumption(
-                                    "fees",
-                                    Number(e.target.value),
-                                  )
-                                }
-                                className="pr-12"
-                              />
-                              <span className="absolute right-3 top-1/2 -translate-y-1/2 text-sm text-muted-foreground">
-                                円
-                              </span>
-                            </div>
-                          </div>
-                          <div className="space-y-1.5">
-                            <Label htmlFor="initialCostAdv">初期費用合計</Label>
-                            <div className="relative">
-                              <Input
-                                id="initialCostAdv"
-                                type="number"
-                                value={currentAssumptions.initialCost}
-                                onChange={(e) =>
-                                  updateAssumption(
-                                    "initialCost",
-                                    Number(e.target.value),
-                                  )
-                                }
-                                className="pr-12"
-                              />
-                              <span className="absolute right-3 top-1/2 -translate-y-1/2 text-sm text-muted-foreground">
-                                円
-                              </span>
-                            </div>
-                          </div>
-                        </AccordionContent>
-                      </AccordionItem>
-
-                      {/* Loan Details (Non-rent only) */}
-                      {activeType !== "rent" && (
-                        <AccordionItem
-                          value="loan"
-                          className="border rounded-lg px-4"
-                        >
-                          <AccordionTrigger className="hover:no-underline">
-                            <div className="flex items-center gap-2">
-                              <KeyRound className="h-4 w-4 text-muted-foreground" />
-                              <span className="font-semibold">ローン詳細</span>
-                            </div>
-                          </AccordionTrigger>
-                          <AccordionContent className="pt-4 space-y-3">
-                            <div className="space-y-1.5">
-                              <Label htmlFor="loanAmountAdv">借入元本</Label>
-                              <div className="relative">
-                                <Input
-                                  id="loanAmountAdv"
-                                  type="number"
-                                  value={currentAssumptions.loanAmount}
-                                  onChange={(e) =>
-                                    updateAssumption(
-                                      "loanAmount",
-                                      Number(e.target.value),
-                                    )
-                                  }
-                                  className="pr-12"
-                                />
-                                <span className="absolute right-3 top-1/2 -translate-y-1/2 text-sm text-muted-foreground">
-                                  円
-                                </span>
-                              </div>
-                            </div>
-                            <div className="space-y-1.5">
-                              <Label htmlFor="interestRateAdv">金利</Label>
-                              <div className="relative">
-                                <Input
-                                  id="interestRateAdv"
-                                  type="number"
-                                  step="0.1"
-                                  value={currentAssumptions.interestRate}
-                                  onChange={(e) =>
-                                    updateAssumption(
-                                      "interestRate",
-                                      Number(e.target.value),
-                                    )
-                                  }
-                                  className="pr-12"
-                                />
-                                <span className="absolute right-3 top-1/2 -translate-y-1/2 text-sm text-muted-foreground">
-                                  %
-                                </span>
-                              </div>
-                            </div>
-                            <div className="space-y-1.5">
-                              <Label htmlFor="loanMonths">期間（月）</Label>
-                              <div className="relative">
-                                <Input
-                                  id="loanMonths"
-                                  type="number"
-                                  value={currentAssumptions.loanYears * 12}
-                                  onChange={(e) =>
-                                    updateAssumption(
-                                      "loanYears",
-                                      Number(e.target.value) / 12,
-                                    )
-                                  }
-                                  className="pr-12"
-                                />
-                                <span className="absolute right-3 top-1/2 -translate-y-1/2 text-sm text-muted-foreground">
-                                  月
-                                </span>
-                              </div>
-                            </div>
-                            <div className="space-y-1.5">
-                              <Label htmlFor="repaymentType">返済方式</Label>
-                              <Select defaultValue="equal-payment">
-                                <SelectTrigger id="repaymentType">
-                                  <SelectValue />
-                                </SelectTrigger>
-                                <SelectContent>
-                                  <SelectItem value="equal-payment">
-                                    元利均等
-                                  </SelectItem>
-                                  <SelectItem value="equal-principal">
-                                    元金均等
-                                  </SelectItem>
-                                </SelectContent>
-                              </Select>
-                            </div>
-                          </AccordionContent>
-                        </AccordionItem>
-                      )}
-
-                      {/* Tax Details (Non-rent only) */}
-                      {activeType !== "rent" && (
-                        <AccordionItem
-                          value="tax"
-                          className="border rounded-lg px-4"
-                        >
-                          <AccordionTrigger className="hover:no-underline">
-                            <div className="flex items-center gap-2">
-                              <Receipt className="h-4 w-4 text-muted-foreground" />
-                              <span className="font-semibold">税（概算）</span>
-                            </div>
-                          </AccordionTrigger>
-                          <AccordionContent className="pt-4 space-y-3">
-                            <div className="space-y-1.5">
-                              <Label htmlFor="propertyTaxAdv">
-                                固定資産税（年）
-                              </Label>
-                              <div className="relative">
-                                <Input
-                                  id="propertyTaxAdv"
-                                  type="number"
-                                  value={currentAssumptions.propertyTax}
-                                  onChange={(e) =>
-                                    updateAssumption(
-                                      "propertyTax",
-                                      Number(e.target.value),
-                                    )
-                                  }
-                                  className="pr-12"
-                                />
-                                <span className="absolute right-3 top-1/2 -translate-y-1/2 text-sm text-muted-foreground">
-                                  円
-                                </span>
-                              </div>
-                            </div>
-                          </AccordionContent>
-                        </AccordionItem>
-                      )}
-
-                      {/* Repair/Management Details */}
-                      <AccordionItem
-                        value="repair"
-                        className="border rounded-lg px-4"
-                      >
-                        <AccordionTrigger className="hover:no-underline">
-                          <div className="flex items-center gap-2">
-                            <Wrench className="h-4 w-4 text-muted-foreground" />
-                            <span className="font-semibold">
-                              {activeType === "condo"
-                                ? "管理・修繕"
-                                : activeType === "rent"
-                                  ? "家賃"
-                                  : "修繕"}
-                            </span>
-                          </div>
-                        </AccordionTrigger>
-                        <AccordionContent className="pt-4 space-y-4">
-                          {activeType === "rent" ? (
-                            <>
-                              <div className="space-y-1.5">
-                                <Label htmlFor="rentAdv">家賃（月）</Label>
-                                <div className="relative">
-                                  <Input
-                                    id="rentAdv"
-                                    type="number"
-                                    value={currentAssumptions.rent || 0}
-                                    onChange={(e) =>
-                                      updateAssumption(
-                                        "rent",
-                                        Number(e.target.value),
-                                      )
-                                    }
-                                    className="pr-12"
-                                  />
-                                  <span className="absolute right-3 top-1/2 -translate-y-1/2 text-sm text-muted-foreground">
-                                    円
-                                  </span>
-                                </div>
-                              </div>
-                              <div className="space-y-1.5">
-                                <Label htmlFor="rentIncreaseAdv">
-                                  家賃上昇率（年）
-                                </Label>
-                                <div className="relative">
-                                  <Input
-                                    id="rentIncreaseAdv"
-                                    type="number"
-                                    step="0.1"
-                                    value={currentAssumptions.rentIncrease || 0}
-                                    onChange={(e) =>
-                                      updateAssumption(
-                                        "rentIncrease",
-                                        Number(e.target.value),
-                                      )
-                                    }
-                                    className="pr-12"
-                                  />
-                                  <span className="absolute right-3 top-1/2 -translate-y-1/2 text-sm text-muted-foreground">
-                                    %
-                                  </span>
-                                </div>
-                              </div>
-                              <div className="space-y-1.5">
-                                <Label htmlFor="renewalFeeAdv">更新料</Label>
-                                <div className="relative">
-                                  <Input
-                                    id="renewalFeeAdv"
-                                    type="number"
-                                    value={currentAssumptions.renewalFee || 0}
-                                    onChange={(e) =>
-                                      updateAssumption(
-                                        "renewalFee",
-                                        Number(e.target.value),
-                                      )
-                                    }
-                                    className="pr-12"
-                                  />
-                                  <span className="absolute right-3 top-1/2 -translate-y-1/2 text-sm text-muted-foreground">
-                                    円
-                                  </span>
-                                </div>
-                              </div>
-                              <div className="space-y-1.5">
-                                <Label htmlFor="renewalCycleAdv">
-                                  更新周期
-                                </Label>
-                                <div className="relative">
-                                  <Input
-                                    id="renewalCycleAdv"
-                                    type="number"
-                                    value={currentAssumptions.renewalCycle || 0}
-                                    onChange={(e) =>
-                                      updateAssumption(
-                                        "renewalCycle",
-                                        Number(e.target.value),
-                                      )
-                                    }
-                                    className="pr-12"
-                                  />
-                                  <span className="absolute right-3 top-1/2 -translate-y-1/2 text-sm text-muted-foreground">
-                                    年
-                                  </span>
-                                </div>
-                              </div>
-                              <div className="space-y-1.5">
-                                <Label htmlFor="movingCostAdv">引越費用</Label>
-                                <div className="relative">
-                                  <Input
-                                    id="movingCostAdv"
-                                    type="number"
-                                    value={currentAssumptions.movingCost || 0}
-                                    onChange={(e) =>
-                                      updateAssumption(
-                                        "movingCost",
-                                        Number(e.target.value),
-                                      )
-                                    }
-                                    className="pr-12"
-                                  />
-                                  <span className="absolute right-3 top-1/2 -translate-y-1/2 text-sm text-muted-foreground">
-                                    円
-                                  </span>
-                                </div>
-                              </div>
-                            </>
-                          ) : activeType === "condo" ? (
-                            <>
-                              <div className="space-y-1.5">
-                                <Label htmlFor="managementFeeAdv">
-                                  管理費（月）
-                                </Label>
-                                <div className="relative">
-                                  <Input
-                                    id="managementFeeAdv"
-                                    type="number"
-                                    value={
-                                      currentAssumptions.managementFee || 0
-                                    }
-                                    onChange={(e) =>
-                                      updateAssumption(
-                                        "managementFee",
-                                        Number(e.target.value),
-                                      )
-                                    }
-                                    className="pr-12"
-                                  />
-                                  <span className="absolute right-3 top-1/2 -translate-y-1/2 text-sm text-muted-foreground">
-                                    円
-                                  </span>
-                                </div>
-                              </div>
-                              <div className="space-y-1.5">
-                                <Label htmlFor="repairReserveAdv">
-                                  修繕積立（月）
-                                </Label>
-                                <div className="relative">
-                                  <Input
-                                    id="repairReserveAdv"
-                                    type="number"
-                                    value={
-                                      currentAssumptions.repairReserve || 0
-                                    }
-                                    onChange={(e) =>
-                                      updateAssumption(
-                                        "repairReserve",
-                                        Number(e.target.value),
-                                      )
-                                    }
-                                    className="pr-12"
-                                  />
-                                  <span className="absolute right-3 top-1/2 -translate-y-1/2 text-sm text-muted-foreground">
-                                    円
-                                  </span>
-                                </div>
-                              </div>
-                              <div className="space-y-1.5">
-                                <Label htmlFor="parkingFeeAdv">
-                                  駐車場（月）
-                                </Label>
-                                <div className="relative">
-                                  <Input
-                                    id="parkingFeeAdv"
-                                    type="number"
-                                    value={currentAssumptions.parkingFee || 0}
-                                    onChange={(e) =>
-                                      updateAssumption(
-                                        "parkingFee",
-                                        Number(e.target.value),
-                                      )
-                                    }
-                                    className="pr-12"
-                                  />
-                                  <span className="absolute right-3 top-1/2 -translate-y-1/2 text-sm text-muted-foreground">
-                                    円
-                                  </span>
-                                </div>
-                              </div>
-
-                              <Separator />
-
-                              <div>
-                                <div className="mb-2 flex items-center justify-between">
-                                  <Label>一時金（大規模修繕等）</Label>
-                                  <Button
-                                    variant="outline"
-                                    size="sm"
-                                    onClick={addRepairItem}
-                                  >
-                                    <Plus className="mr-1 h-3 w-3" />
-                                    行を追加
-                                  </Button>
-                                </div>
-                                <div className="space-y-2">
-                                  {currentAssumptions.repairSchedule?.map(
-                                    (item) => (
-                                      <div
-                                        key={item.id}
-                                        className="grid grid-cols-12 gap-2 items-start"
-                                      >
-                                        <div className="col-span-3">
-                                          <Input
-                                            type="number"
-                                            placeholder="周期"
-                                            value={item.cycle}
-                                            onChange={(e) =>
-                                              updateRepairItem(
-                                                item.id,
-                                                "cycle",
-                                                Number(e.target.value),
-                                              )
-                                            }
-                                          />
-                                        </div>
-                                        <div className="col-span-4">
-                                          <Input
-                                            type="number"
-                                            placeholder="金額"
-                                            value={item.amount}
-                                            onChange={(e) =>
-                                              updateRepairItem(
-                                                item.id,
-                                                "amount",
-                                                Number(e.target.value),
-                                              )
-                                            }
-                                          />
-                                        </div>
-                                        <div className="col-span-4">
-                                          <Input
-                                            placeholder="メモ"
-                                            value={item.memo}
-                                            onChange={(e) =>
-                                              updateRepairItem(
-                                                item.id,
-                                                "memo",
-                                                e.target.value,
-                                              )
-                                            }
-                                          />
-                                        </div>
-                                        <div className="col-span-1">
-                                          <Button
-                                            variant="ghost"
-                                            size="icon"
-                                            onClick={() =>
-                                              removeRepairItem(item.id)
-                                            }
-                                            className="h-10 w-10"
-                                          >
-                                            <Trash2 className="h-4 w-4" />
-                                          </Button>
-                                        </div>
-                                      </div>
-                                    ),
-                                  )}
-                                </div>
-                              </div>
-                            </>
-                          ) : (
-                            <>
-                              <div>
-                                <div className="mb-2 flex items-center justify-between">
-                                  <Label>修繕スケジュール</Label>
-                                  <Button
-                                    variant="outline"
-                                    size="sm"
-                                    onClick={addRepairItem}
-                                  >
-                                    <Plus className="mr-1 h-3 w-3" />
-                                    行を追加
-                                  </Button>
-                                </div>
-                                <div className="space-y-2">
-                                  {currentAssumptions.repairSchedule?.map(
-                                    (item) => (
-                                      <div
-                                        key={item.id}
-                                        className="grid grid-cols-12 gap-2 items-start"
-                                      >
-                                        <div className="col-span-3">
-                                          <Input
-                                            type="number"
-                                            placeholder="周期（年）"
-                                            value={item.cycle}
-                                            onChange={(e) =>
-                                              updateRepairItem(
-                                                item.id,
-                                                "cycle",
-                                                Number(e.target.value),
-                                              )
-                                            }
-                                          />
-                                        </div>
-                                        <div className="col-span-4">
-                                          <Input
-                                            type="number"
-                                            placeholder="金額（円）"
-                                            value={item.amount}
-                                            onChange={(e) =>
-                                              updateRepairItem(
-                                                item.id,
-                                                "amount",
-                                                Number(e.target.value),
-                                              )
-                                            }
-                                          />
-                                        </div>
-                                        <div className="col-span-4">
-                                          <Input
-                                            placeholder="メモ"
-                                            value={item.memo}
-                                            onChange={(e) =>
-                                              updateRepairItem(
-                                                item.id,
-                                                "memo",
-                                                e.target.value,
-                                              )
-                                            }
-                                          />
-                                        </div>
-                                        <div className="col-span-1">
-                                          <Button
-                                            variant="ghost"
-                                            size="icon"
-                                            onClick={() =>
-                                              removeRepairItem(item.id)
-                                            }
-                                            className="h-10 w-10"
-                                          >
-                                            <Trash2 className="h-4 w-4" />
-                                          </Button>
-                                        </div>
-                                      </div>
-                                    ),
-                                  )}
-                                </div>
-                              </div>
-                            </>
-                          )}
-                        </AccordionContent>
-                      </AccordionItem>
-
-                      {/* Utility Details */}
-                      <AccordionItem
-                        value="utility"
-                        className="border rounded-lg px-4"
-                      >
-                        <AccordionTrigger className="hover:no-underline">
-                          <div className="flex items-center gap-2">
-                            <Flame className="h-4 w-4 text-muted-foreground" />
-                            <span className="font-semibold">光熱費</span>
-                          </div>
-                        </AccordionTrigger>
-                        <AccordionContent className="pt-4 space-y-3">
-                          <div className="space-y-1.5">
-                            <Label htmlFor="utilityBaseAdv">
-                              基準光熱費（月）
-                            </Label>
-                            <div className="relative">
-                              <Input
-                                id="utilityBaseAdv"
-                                type="number"
-                                value={currentAssumptions.utilityBase}
-                                onChange={(e) =>
-                                  updateAssumption(
-                                    "utilityBase",
-                                    Number(e.target.value),
-                                  )
-                                }
-                                className="pr-12"
-                              />
-                              <span className="absolute right-3 top-1/2 -translate-y-1/2 text-sm text-muted-foreground">
-                                円
-                              </span>
-                            </div>
-                          </div>
-                          <div className="space-y-1.5">
-                            <Label htmlFor="utilityCoefficientAdv">
-                              性能係数
-                            </Label>
-                            <Input
-                              id="utilityCoefficientAdv"
-                              type="number"
-                              step="0.01"
-                              value={currentAssumptions.utilityCoefficient}
-                              onChange={(e) =>
-                                updateAssumption(
-                                  "utilityCoefficient",
-                                  Number(e.target.value),
-                                )
-                              }
-                            />
-                            <p className="text-xs text-muted-foreground">
-                              0.85: 高性能 / 1.0: 標準 / 1.15: 低性能
-                            </p>
-                          </div>
-                        </AccordionContent>
-                      </AccordionItem>
-                    </Accordion>
-                  </>
+                    {renderCommon()}
+                  </div>
                 )}
               </CardContent>
+              <CardFooter className="flex justify-end gap-3">
+                <Button variant="outline" onClick={handleReset}>
+                  <RotateCcw className="mr-2 h-4 w-4" />
+                  元に戻す
+                </Button>
+                <Button onClick={handleSave}>
+                  <Save className="mr-2 h-4 w-4" />
+                  保存
+                </Button>
+              </CardFooter>
             </Card>
           </div>
 
-          {/* Right: Preview & Guidance */}
           <div className="lg:col-span-4 space-y-4">
-            {/* Live Preview */}
             <Card>
               <CardHeader>
-                <CardTitle className="text-lg">プレビュー（概算）</CardTitle>
+                <CardTitle className="text-lg">編集のヒント</CardTitle>
                 <CardDescription>
-                  入力中の前提から計算した概算です
+                  迷う項目は空欄でもOK。あとから調整できます。
                 </CardDescription>
               </CardHeader>
-              <CardContent className="space-y-4">
-                <div className="space-y-2">
-                  <Label>期間</Label>
-                  <Select
-                    value={horizonYears.toString()}
-                    onValueChange={(v) => setHorizonYears(Number(v))}
-                  >
-                    <SelectTrigger>
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="30">30年</SelectItem>
-                      <SelectItem value="35">35年</SelectItem>
-                      <SelectItem value="40">40年</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-
-                <Separator />
-
-                <div>
-                  <div className="text-sm text-muted-foreground mb-1">
-                    累計LCC
-                  </div>
-                  <div className="text-3xl font-bold">
-                    {formatYen(calculateLCC())}
-                  </div>
-                </div>
-
-                <Separator />
-
-                <div className="space-y-2">
-                  <div className="text-sm font-medium mb-2">内訳</div>
-                  <div className="space-y-1.5 text-sm">
-                    <div className="flex justify-between">
-                      <span className="text-muted-foreground">初期費用</span>
-                      <span className="font-medium">
-                        {formatYen(breakdown.initial)}
-                      </span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span className="text-muted-foreground">
-                        {activeType === "rent" ? "家賃" : "ローン"}
-                      </span>
-                      <span className="font-medium">
-                        {formatYen(breakdown.loanRent)}
-                      </span>
-                    </div>
-                    {activeType !== "rent" && (
-                      <div className="flex justify-between">
-                        <span className="text-muted-foreground">
-                          税（概算）
-                        </span>
-                        <span className="font-medium">
-                          {formatYen(breakdown.tax)}
-                        </span>
-                      </div>
-                    )}
-                    <div className="flex justify-between">
-                      <span className="text-muted-foreground">
-                        {activeType === "rent" ? "引越等" : "修繕/管理"}
-                      </span>
-                      <span className="font-medium">
-                        {formatYen(breakdown.repair)}
-                      </span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span className="text-muted-foreground">光熱費</span>
-                      <span className="font-medium">
-                        {formatYen(breakdown.utility)}
-                      </span>
-                    </div>
-                  </div>
-                </div>
-              </CardContent>
-              <CardFooter>
-                <Button
-                  className="w-full"
-                  onClick={() =>
-                  router.push(buildScenarioLink(`/plans/${planId}/housing`))
-                }
-              >
-                比較を更新して見る
-              </Button>
-              </CardFooter>
-            </Card>
-
-            {/* Guidance */}
-            <Card>
-              <CardHeader>
-                <CardTitle className="text-lg flex items-center gap-2">
-                  <Info className="h-4 w-4" />
-                  入力のコツ
-                </CardTitle>
-              </CardHeader>
               <CardContent className="space-y-2 text-sm text-muted-foreground">
-                <p>わからない項目はそのままでOK</p>
-                <p>後からいつでも修正できます</p>
-                <p>税・制度は概算です</p>
+                <p>・金額は概算で入力</p>
+                <p>・詳細は必要なところだけでOK</p>
+                <p>・保存後に比較に反映されます</p>
               </CardContent>
             </Card>
 
-            {/* Changes Alert */}
             {isDirty && (
-              <Card className="border-amber-200 bg-amber-50 dark:border-amber-900 dark:bg-amber-950/20">
-                <CardContent className="pt-4">
-                  <div className="flex gap-2">
-                    <AlertTriangle className="h-4 w-4 shrink-0 text-amber-600 dark:text-amber-400 mt-0.5" />
-                    <div className="space-y-1">
-                      <p className="text-sm font-medium text-amber-900 dark:text-amber-100">
-                        前提の変更点
-                      </p>
-                      <p className="text-xs text-amber-700 dark:text-amber-200">
-                        保存すると比較結果に反映されます
-                      </p>
-                    </div>
-                  </div>
+              <Card className="border-amber-200 bg-amber-50">
+                <CardContent className="pt-4 text-sm">
+                  変更があります。保存すると比較結果に反映されます。
                 </CardContent>
               </Card>
             )}
           </div>
-        </div>
-      </div>
-
-      {/* Sticky Footer (Mobile) */}
-      <div className="lg:hidden fixed bottom-0 left-0 right-0 border-t bg-background p-4">
-        <div className="flex gap-3">
-          <Button
-            variant="outline"
-            className="flex-1 bg-transparent"
-            onClick={handleReset}
-          >
-            <RotateCcw className="mr-2 h-4 w-4" />
-            元に戻す
-          </Button>
-          <Button className="flex-1" onClick={handleSave}>
-            <Save className="mr-2 h-4 w-4" />
-            保存
-          </Button>
         </div>
       </div>
     </div>

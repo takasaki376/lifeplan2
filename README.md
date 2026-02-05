@@ -41,7 +41,6 @@
 ```bash
 yarn install
 ```
-````
 
 ### 起動
 
@@ -186,7 +185,6 @@ MVP は `IndexedDBRepository` を実装し、将来 `SupabaseRepository` に差�
 
 - Epic → Story/Task で作業を管理します
 - 最初の優先度：
-
   1. データ層（IndexedDB + Repo 抽象化）
   2. 月次（一覧・かんたん・詳細）
   3. 住宅 LCC（比較・前提編集・計算）

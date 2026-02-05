@@ -46,6 +46,44 @@ describe("lcc calc", () => {
     expect(month24.other).toBe(100000);
   });
 
+  it("uses custom rent increase rate when provided", () => {
+    const housing: HousingAssumptions = {
+      id: "h-1b",
+      planVersionId: "v-1",
+      housingType: "rent",
+      isSelected: false,
+      utilitiesBaseMonthlyYen: 0,
+      utilitiesFactor: 1,
+      createdAt: "2026-01-01",
+      updatedAt: "2026-01-01",
+      typeSpecific: {
+        rentMonthlyYen: 100000,
+        rentIncreaseRateAnnual: 0.05,
+        renewalFeeYen: 0,
+        renewalCycleYears: 2,
+        movingCostYen: 0,
+      },
+    };
+
+    const result = calcLcc({
+      housing,
+      horizonMonths: 13,
+      startYm: "2026-01",
+      scenario: {
+        id: "s-1b",
+        planVersionId: "v-1",
+        scenarioKey: "base",
+        inflationRate: 0.01,
+        createdAt: "2026-01-01",
+      },
+    });
+
+    const month0 = result.series.months[0];
+    const month12 = result.series.months[12];
+    expect(month0.loanOrRent).toBe(100000);
+    expect(month12.loanOrRent).toBe(Math.round(100000 * 1.05));
+  });
+
   it("counts repairs schedule events", () => {
     const housing: HousingAssumptions = {
       id: "h-2",

@@ -126,6 +126,7 @@ export interface HousingCommonAssumptions {
 export interface RepairsScheduleItem {
   cycleYears: number;
   amountYen: MoneyYen;
+  memo?: string;
 }
 
 export interface HighPerformanceHomeAssumptions
@@ -160,6 +161,7 @@ export interface RentAssumptions extends HousingCommonAssumptions {
   housingType: "rent";
   typeSpecific?: {
     rentMonthlyYen?: MoneyYen;
+    rentIncreaseRateAnnual?: number;
     renewalFeeYen?: MoneyYen;
     renewalCycleYears?: number;
     movingCostYen?: MoneyYen;
