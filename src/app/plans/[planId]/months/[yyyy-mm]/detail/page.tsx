@@ -95,7 +95,7 @@ type RowError = {
 
 const formatCurrency = (amount?: number) => {
   if (amount === undefined || Number.isNaN(amount)) return "";
-  return new Intl.NumberFormat("ja-JP").format(amount);
+  return formatYen(amount, { suffix: "" });
 };
 
 export default function MonthlyDetailPage() {
