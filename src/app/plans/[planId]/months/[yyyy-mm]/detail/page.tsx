@@ -313,7 +313,8 @@ export default function MonthlyDetailPage() {
           id: item.id,
           kind: item.kind,
           category: item.category,
-          amountYen: parseYenInput(item.amountText) ?? 0,
+          // validateRows() guarantees amountText parses to a positive number
+          amountYen: parseYenInput(item.amountText)!,
           note: item.note.trim(),
           sortOrder: item.sortOrder,
         })),
