@@ -406,4 +406,76 @@ describe("MonthlyDetailPage", () => {
     const errorMessages = await screen.findAllByText("読み込みに失敗しました");
     expect(errorMessages.length).toBeGreaterThan(0);
   });
+
+  it("applies income template with sequential sortOrder", async () => {
+    const user = userEvent.setup();
+    monthlyGetByYmMock.mockResolvedValue({
+      id: "record-1",
+      planId: "plan-123",
+      ym: "2026-01",
+      isFinalized: false,
+      createdAt: "2026-01-01T00:00:00.000Z",
+      updatedAt: "2026-01-02T00:00:00.000Z",
+    });
+    monthlyListItemsMock.mockResolvedValue([
+      {
+        id: "item-expense",
+        monthlyRecordId: "record-1",
+        kind: "expense",
+        category: "food",
+        amountYen: 20000,
+        note: "食費",
+        sortOrder: 5,
+      },
+    ]);
+    monthlyUpsertByYmMock.mockResolvedValue({
+      id: "record-1",
+      planId: "plan-123",
+      ym: "2026-01",
+      isFinalized: false,
+      createdAt: "2026-01-01T00:00:00.000Z",
+      updatedAt: "2026-01-02T00:00:00.000Z",
+    });
+
+    render(<MonthlyDetailPage />);
+
+    await waitFor(() =>
+      expect(screen.getByText("収入（内訳）")).toBeInTheDocument(),
+    );
+
+    await user.click(screen.getByRole("button", { name: "主＋副" }));
+
+    const emptyNameInputs = screen
+      .getAllByPlaceholderText("名称")
+      .filter((input) => (input as HTMLInputElement).value === "");
+    const emptyAmountInputs = screen
+      .getAllByPlaceholderText("金額")
+      .filter((input) => (input as HTMLInputElement).value === "");
+
+    await user.type(emptyNameInputs[0], "主収入");
+    await user.type(emptyAmountInputs[0], "300000");
+    await user.type(emptyNameInputs[1], "副収入");
+    await user.type(emptyAmountInputs[1], "50000");
+
+    const saveButton = screen.getAllByRole("button", {
+      name: "保存して戻る",
+    })[0];
+    await user.click(saveButton);
+
+    await waitFor(() => {
+      expect(monthlyReplaceItemsMock).toHaveBeenCalled();
+    });
+
+    const savedItems = monthlyReplaceItemsMock.mock.calls[0][1] as Array<{
+      kind: string;
+      sortOrder: number;
+      note: string;
+    }>;
+    const incomeOrders = savedItems
+      .filter((item) => item.kind === "income")
+      .map((item) => item.sortOrder)
+      .sort((a, b) => a - b);
+    expect(incomeOrders).toEqual([1, 2]);
+    expect(savedItems.some((item) => item.note === "食費")).toBe(true);
+  });
 });

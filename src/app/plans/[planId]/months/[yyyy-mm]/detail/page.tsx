@@ -380,6 +380,7 @@ export default function MonthlyDetailPage() {
     isLoading || isSaving || missingRecord || Boolean(loadError);
 
   const applyIncomeTemplate = (type: "main" | "main-side") => {
+    const baseOrder = getNextSortOrder("income");
     const base: MonthlyItemRow[] =
       type === "main"
         ? [
@@ -389,7 +390,7 @@ export default function MonthlyDetailPage() {
               category: "main",
               amountText: "",
               note: "",
-              sortOrder: getNextSortOrder("income"),
+              sortOrder: baseOrder,
             },
           ]
         : [
@@ -399,7 +400,7 @@ export default function MonthlyDetailPage() {
               category: "main",
               amountText: "",
               note: "",
-              sortOrder: getNextSortOrder("income"),
+              sortOrder: baseOrder,
             },
             {
               id: crypto.randomUUID(),
@@ -407,17 +408,14 @@ export default function MonthlyDetailPage() {
               category: "side",
               amountText: "",
               note: "",
-              sortOrder: getNextSortOrder("income") + 1,
+              sortOrder: baseOrder + 1,
             },
           ];
-    setItems((prev) => [
-      ...prev.filter((item) => item.kind !== "income"),
-      ...base,
-      ...prev.filter((item) => item.kind === "income"),
-    ]);
+    setItems((prev) => [...prev, ...base]);
   };
 
   const applyExpenseTemplate = () => {
+    const baseOrder = getNextSortOrder("expense");
     const template: MonthlyItemRow[] = [
       {
         id: crypto.randomUUID(),
@@ -425,7 +423,7 @@ export default function MonthlyDetailPage() {
         category: "housing",
         amountText: "",
         note: "",
-        sortOrder: getNextSortOrder("expense"),
+        sortOrder: baseOrder,
         expenseType: "fixed",
       },
       {
@@ -434,7 +432,7 @@ export default function MonthlyDetailPage() {
         category: "utilities",
         amountText: "",
         note: "",
-        sortOrder: getNextSortOrder("expense") + 1,
+        sortOrder: baseOrder + 1,
         expenseType: "fixed",
       },
       {
@@ -443,7 +441,7 @@ export default function MonthlyDetailPage() {
         category: "food",
         amountText: "",
         note: "",
-        sortOrder: getNextSortOrder("expense") + 2,
+        sortOrder: baseOrder + 2,
         expenseType: "variable",
       },
       {
@@ -452,15 +450,11 @@ export default function MonthlyDetailPage() {
         category: "daily",
         amountText: "",
         note: "",
-        sortOrder: getNextSortOrder("expense") + 3,
+        sortOrder: baseOrder + 3,
         expenseType: "variable",
       },
     ];
-    setItems((prev) => [
-      ...prev.filter((item) => item.kind !== "expense"),
-      ...template,
-      ...prev.filter((item) => item.kind === "expense"),
-    ]);
+    setItems((prev) => [...prev, ...template]);
   };
 
   const handleActionNotReady = (label: string) => {
