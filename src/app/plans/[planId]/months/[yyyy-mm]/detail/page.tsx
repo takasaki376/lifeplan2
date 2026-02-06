@@ -721,7 +721,11 @@ export default function MonthlyDetailPage() {
                                     updateItem(
                                       item.id,
                                       "amountText",
-                                      e.target.value.replace(/[^\d]/g, ""),
+                                      e.target.value
+                                        .replace(/[０-９]/g, (c) =>
+                                          String.fromCharCode(c.charCodeAt(0) - 0xfee0),
+                                        )
+                                        .replace(/[^\d]/g, ""),
                                     )
                                   }
                                   className="text-right"
