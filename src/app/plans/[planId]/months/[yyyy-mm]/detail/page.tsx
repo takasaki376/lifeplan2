@@ -857,13 +857,18 @@ export default function MonthlyDetailPage() {
                                   inputMode="numeric"
                                   placeholder="金額"
                                   value={item.amountText}
-                                  onChange={(e) =>
+                                  onChange={(e) => {
+                                    const normalized = e.target.value.replace(
+                                      /[０-９]/g,
+                                      (s) =>
+                                        String.fromCharCode(s.charCodeAt(0) - 0xFEE0),
+                                    );
                                     updateItem(
                                       item.id,
                                       "amountText",
-                                      e.target.value.replace(/[^\d]/g, ""),
-                                    )
-                                  }
+                                      normalized.replace(/[^\d]/g, ""),
+                                    );
+                                  }}
                                   className="text-right"
                                 />
                                 {rowErrors[item.id]?.amountText && (
