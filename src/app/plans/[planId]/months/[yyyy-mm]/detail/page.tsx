@@ -89,6 +89,7 @@ type MonthlyItemRow = {
 };
 
 type RowError = {
+  category?: string;
   note?: string;
   amountText?: string;
 };
@@ -283,6 +284,9 @@ export default function MonthlyDetailPage() {
     const errors: Record<string, RowError> = {};
     for (const item of items) {
       const entry: RowError = {};
+      if (!item.category.trim()) {
+        entry.category = "カテゴリを選択してください";
+      }
       if (!item.note.trim()) {
         entry.note = "名称は必須です";
       }
@@ -687,23 +691,30 @@ export default function MonthlyDetailPage() {
                             className="flex flex-col gap-2 rounded-lg border p-3 sm:flex-row sm:items-start"
                           >
                             <div className="grid flex-1 gap-2 sm:grid-cols-[140px_120px_1fr]">
-                              <Select
-                                value={item.category}
-                                onValueChange={(value) =>
-                                  updateItem(item.id, "category", value)
-                                }
-                              >
-                                <SelectTrigger>
-                                  <SelectValue placeholder="カテゴリ" />
-                                </SelectTrigger>
-                                <SelectContent>
-                                  {INCOME_CATEGORIES.map((cat) => (
-                                    <SelectItem key={cat.value} value={cat.value}>
-                                      {cat.label}
-                                    </SelectItem>
-                                  ))}
-                                </SelectContent>
-                              </Select>
+                              <div>
+                                <Select
+                                  value={item.category}
+                                  onValueChange={(value) =>
+                                    updateItem(item.id, "category", value)
+                                  }
+                                >
+                                  <SelectTrigger>
+                                    <SelectValue placeholder="カテゴリ" />
+                                  </SelectTrigger>
+                                  <SelectContent>
+                                    {INCOME_CATEGORIES.map((cat) => (
+                                      <SelectItem key={cat.value} value={cat.value}>
+                                        {cat.label}
+                                      </SelectItem>
+                                    ))}
+                                  </SelectContent>
+                                </Select>
+                                {rowErrors[item.id]?.category && (
+                                  <p className="mt-1 text-xs text-destructive">
+                                    {rowErrors[item.id]?.category}
+                                  </p>
+                                )}
+                              </div>
                               <div>
                                 <Input
                                   type="text"
@@ -811,28 +822,35 @@ export default function MonthlyDetailPage() {
                             className="flex flex-col gap-2 rounded-lg border p-3 sm:flex-row sm:items-start"
                           >
                             <div className="grid flex-1 gap-2 sm:grid-cols-[140px_120px_1fr_80px]">
-                              <Select
-                                value={item.category}
-                                onValueChange={(value) => {
-                                  updateItem(item.id, "category", value);
-                                  updateItem(
-                                    item.id,
-                                    "expenseType",
-                                    mapExpenseType(value),
-                                  );
-                                }}
-                              >
-                                <SelectTrigger>
-                                  <SelectValue placeholder="カテゴリ" />
-                                </SelectTrigger>
-                                <SelectContent>
-                                  {EXPENSE_CATEGORIES.map((cat) => (
-                                    <SelectItem key={cat.value} value={cat.value}>
-                                      {cat.label}
-                                    </SelectItem>
-                                  ))}
-                                </SelectContent>
-                              </Select>
+                              <div>
+                                <Select
+                                  value={item.category}
+                                  onValueChange={(value) => {
+                                    updateItem(item.id, "category", value);
+                                    updateItem(
+                                      item.id,
+                                      "expenseType",
+                                      mapExpenseType(value),
+                                    );
+                                  }}
+                                >
+                                  <SelectTrigger>
+                                    <SelectValue placeholder="カテゴリ" />
+                                  </SelectTrigger>
+                                  <SelectContent>
+                                    {EXPENSE_CATEGORIES.map((cat) => (
+                                      <SelectItem key={cat.value} value={cat.value}>
+                                        {cat.label}
+                                      </SelectItem>
+                                    ))}
+                                  </SelectContent>
+                                </Select>
+                                {rowErrors[item.id]?.category && (
+                                  <p className="mt-1 text-xs text-destructive">
+                                    {rowErrors[item.id]?.category}
+                                  </p>
+                                )}
+                              </div>
                               <div>
                                 <Input
                                   type="text"
@@ -881,7 +899,7 @@ export default function MonthlyDetailPage() {
                                     );
                                   }
                                 }}
-                                className="justify-start"
+                                className="justify-start self-start"
                               >
                                 <ToggleGroupItem
                                   value="fixed"

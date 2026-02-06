@@ -34,6 +34,41 @@ vi.mock("next/link", () => ({
   ),
 }));
 
+vi.mock("@/components/ui/select", () => ({
+  Select: ({
+    value,
+    onValueChange,
+    children,
+  }: {
+    value: string;
+    onValueChange: (value: string) => void;
+    children: React.ReactNode;
+  }) => (
+    <select
+      value={value}
+      onChange={(event) => onValueChange(event.target.value)}
+    >
+      {children}
+    </select>
+  ),
+  SelectTrigger: ({ children }: { children: React.ReactNode }) => (
+    <>{children}</>
+  ),
+  SelectValue: ({ placeholder }: { placeholder?: string }) => (
+    <option value="">{placeholder}</option>
+  ),
+  SelectContent: ({ children }: { children: React.ReactNode }) => (
+    <>{children}</>
+  ),
+  SelectItem: ({
+    value,
+    children,
+  }: {
+    value: string;
+    children: React.ReactNode;
+  }) => <option value={value}>{children}</option>,
+}));
+
 vi.mock("@/lib/repo/factory", () => ({
   createRepositories: () => ({
     plan: {
@@ -324,6 +359,11 @@ describe("MonthlyDetailPage", () => {
     await user.type(emptyAmountInputs[0], "50000");
     await user.type(emptyNameInputs[1], "追加支出");
     await user.type(emptyAmountInputs[1], "15000");
+
+    const categorySelects = screen.getAllByRole("combobox");
+    const lastTwoSelects = categorySelects.slice(-2);
+    await user.selectOptions(lastTwoSelects[0], "other");
+    await user.selectOptions(lastTwoSelects[1], "daily");
 
     const existingIncomeName = screen.getByDisplayValue("給与");
     await user.clear(existingIncomeName);
