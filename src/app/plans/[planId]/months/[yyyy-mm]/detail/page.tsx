@@ -149,7 +149,10 @@ export default function MonthlyDetailPage() {
     id: item.id,
     kind: item.kind,
     category: item.category,
-    amountText: item.amountYen ? String(item.amountYen) : "",
+    amountText:
+      item.amountYen !== undefined && item.amountYen !== null
+        ? String(item.amountYen)
+        : "",
     note: item.note ?? "",
     sortOrder: item.sortOrder ?? 0,
     expenseType: item.kind === "expense" ? mapExpenseType(item.category) : undefined,
